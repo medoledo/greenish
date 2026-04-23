@@ -8,7 +8,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>{{ session.title }} - Greenish</title>
-    <link rel="stylesheet" href="{% static 'css/session.css' %}">
+    <link rel="stylesheet" href="{% static 'css/session.css' %}?v=2">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="participant-page">
@@ -193,6 +193,7 @@
         const emojis = ['🌿','','🌱','','💚','','🌸','','🌍',''];
         for (let i = 0; i < 30; i++) {
             const s = document.createElement('span');
+            s.style.position = 'absolute';
             s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
             s.style.left = Math.random() * 100 + '%';
             s.style.top = Math.random() * 100 + '%';
@@ -205,32 +206,43 @@
 
     // SSE — named events
     function connectSSE() {
-        eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/?v=' + Date.now());
-        eventSource.addEventListener('slide_change', function(e) {
-            const data = JSON.parse(e.data);
-            updateSlideDisplay(data);
-        });
-        eventSource.addEventListener('activity_toggle', function(e) {
-            const data = JSON.parse(e.data);
-            ACTIVITY_ACTIVE = data.activity_active;
-            toggleActivityPanel();
-        });
-        eventSource.addEventListener('session_status', function(e) {
-            const data = JSON.parse(e.data);
-            if (data.status === 'ended') {
+        try {
+            if (eventSource) { eventSource.close(); eventSource = null; }
+            eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/?v=' + Date.now());
+            eventSource.addEventListener('slide_change', function(e) {
+                try { updateSlideDisplay(JSON.parse(e.data)); } catch (err) { console.error('slide_change handler error:', err); }
+            });
+            eventSource.addEventListener('activity_toggle', function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    ACTIVITY_ACTIVE = data.activity_active;
+                    toggleActivityPanel();
+                } catch (err) { console.error('activity_toggle handler error:', err); }
+            });
+            eventSource.addEventListener('session_status', function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.status === 'ended') window.location.href = '/session/' + SESSION_CODE + '/join/';
+                } catch (err) { console.error('session_status handler error:', err); }
+            });
+            eventSource.addEventListener('session_ended', function(e) {
                 window.location.href = '/session/' + SESSION_CODE + '/join/';
-            }
-        });
-        eventSource.addEventListener('session_ended', function(e) {
-            window.location.href = '/session/' + SESSION_CODE + '/join/';
-        });
-        eventSource.addEventListener('show_answers', function(e) {
-            const data = JSON.parse(e.data);
-            showCorrectAnswers(data);
-        });
-        eventSource.onerror = function() {
-            setTimeout(connectSSE, 3000);
-        };
+            });
+            eventSource.addEventListener('show_answers', function(e) {
+                try {
+                    console.log('show_answers SSE received');
+                    showCorrectAnswers(JSON.parse(e.data));
+                } catch (err) { console.error('show_answers handler error:', err); }
+            });
+            eventSource.onerror = function() {
+                console.log('SSE error, reconnecting...');
+                if (eventSource) { eventSource.close(); eventSource = null; }
+                setTimeout(connectSSE, 3000);
+            };
+        } catch (err) {
+            console.error('connectSSE error:', err);
+            setTimeout(connectSSE, 5000);
+        }
     }
 
     function clearPostsInterval() {
@@ -241,87 +253,108 @@
     }
 
     function updateSlideDisplay(data) {
-        if (data.slide_index === CURRENT_INDEX) return;
-        CURRENT_INDEX = data.slide_index;
+        try {
+            if (!data || data.slide_index === CURRENT_INDEX) return;
+            CURRENT_INDEX = data.slide_index;
 
-        // Update progress dots
-        const dots = document.querySelectorAll('#progress-bar .p-progress-dot');
-        dots.forEach((dot, i) => {
-            dot.classList.remove('active', 'done');
-            if (i === CURRENT_INDEX) dot.classList.add('active');
-            else if (i < CURRENT_INDEX) dot.classList.add('done');
-        });
+            // Update progress dots
+            const dots = document.querySelectorAll('#progress-bar .p-progress-dot');
+            dots.forEach((dot, i) => {
+                dot.classList.remove('active', 'done');
+                if (i === CURRENT_INDEX) dot.classList.add('active');
+                else if (i < CURRENT_INDEX) dot.classList.add('done');
+            });
 
-        const slide = data.slide;
-        const card = document.getElementById('slide-card');
+            const slide = data.slide;
+            const card = document.getElementById('slide-card');
 
-        if (!slide) {
-            card.innerHTML = '<div class="p-slide-empty"><div class="empty-icon">🌿</div><h2>Waiting to start...</h2><p>The facilitator will begin shortly</p></div>';
-            return;
+            if (!slide) {
+                if (card) card.innerHTML = '<div class="p-slide-empty"><div class="empty-icon">🌿</div><h2>Waiting to start...</h2><p>The facilitator will begin shortly</p></div>';
+                return;
+            }
+
+            CURRENT_SLIDE_ID = slide.id || 0;
+            CURRENT_SLIDE_TYPE = slide.slide_type || '';
+            CURRENT_ACTIVITY_TYPE = slide.activity_type || '';
+            ACTIVITY_CONFIG = slide.activity_config || null;
+            activitySubmitted = false;
+            myAnswers = {};
+            clearPostsInterval();
+            const subInd = document.getElementById('submitted-indicator');
+            if (subInd) subInd.style.display = 'none';
+            const revealEl = document.getElementById('answers-reveal');
+            if (revealEl) revealEl.style.display = 'none';
+
+            // Update shocking class
+            if (card) {
+                if (slide.shocking_fact) card.classList.add('shocking');
+                else card.classList.remove('shocking');
+            }
+
+            // Build content
+            let html = '';
+            if (slide.title) {
+                html += '<h2 class="p-slide-title' + (slide.shocking_fact ? ' shocking-text' : '') + '">' + slide.title + '</h2>';
+            }
+            if (slide.image_url) {
+                html += '<img src="' + slide.image_url + '" alt="" class="p-slide-image">';
+            }
+            html += '<div class="p-slide-body">' + (slide.content || '').replace(/\n/g, '<br>') + '</div>';
+
+            const slideContent = document.getElementById('slide-content');
+            if (slideContent) slideContent.innerHTML = html;
+
+            // Activity panel visibility
+            toggleActivityPanel();
+        } catch (err) {
+            console.error('updateSlideDisplay error:', err);
         }
-
-        CURRENT_SLIDE_ID = slide.id;
-        CURRENT_SLIDE_TYPE = slide.slide_type;
-        CURRENT_ACTIVITY_TYPE = slide.activity_type || '';
-        ACTIVITY_CONFIG = slide.activity_config;
-        activitySubmitted = false;
-        clearPostsInterval();
-        myAnswers = {};
-        document.getElementById('submitted-indicator').style.display = 'none';
-        const revealEl = document.getElementById('answers-reveal');
-        if (revealEl) revealEl.style.display = 'none';
-
-        // Update shocking class
-        if (slide.shocking_fact) card.classList.add('shocking');
-        else card.classList.remove('shocking');
-
-        // Build content
-        let html = '';
-        if (slide.title) {
-            html += '<h2 class="p-slide-title' + (slide.shocking_fact ? ' shocking-text' : '') + '">' + slide.title + '</h2>';
-        }
-        if (slide.image_url) {
-            html += '<img src="' + slide.image_url + '" alt="" class="p-slide-image">';
-        }
-        html += '<div class="p-slide-body">' + (slide.content || '').replace(/\n/g, '<br>') + '</div>';
-
-        document.getElementById('slide-content').innerHTML = html;
-
-        // Activity panel visibility
-        toggleActivityPanel();
     }
 
     function toggleActivityPanel() {
-        const panel = document.getElementById('activity-panel');
-        if (!panel) return;
+        try {
+            const panel = document.getElementById('activity-panel');
+            if (!panel) return;
 
-        const shouldShow = ACTIVITY_ACTIVE && CURRENT_SLIDE_TYPE === 'activity' && CURRENT_ACTIVITY_TYPE;
-        panel.style.display = shouldShow ? 'block' : 'none';
+            const shouldShow = ACTIVITY_ACTIVE && CURRENT_SLIDE_TYPE === 'activity' && CURRENT_ACTIVITY_TYPE;
+            panel.style.display = shouldShow ? 'block' : 'none';
 
-        if (shouldShow && !activitySubmitted) {
-            renderActivity(CURRENT_ACTIVITY_TYPE, ACTIVITY_CONFIG);
-        } else if (!shouldShow) {
-            clearPostsInterval();
+            if (shouldShow && !activitySubmitted) {
+                renderActivity(CURRENT_ACTIVITY_TYPE, ACTIVITY_CONFIG);
+            } else if (!shouldShow) {
+                clearPostsInterval();
+            }
+        } catch (err) {
+            console.error('toggleActivityPanel error:', err);
         }
     }
 
     // Render activity based on template type
-    if (ACTIVITY_ACTIVE && CURRENT_SLIDE_TYPE === 'activity' && CURRENT_ACTIVITY_TYPE) {
-        renderActivity(CURRENT_ACTIVITY_TYPE, ACTIVITY_CONFIG);
+    try {
+        if (ACTIVITY_ACTIVE && CURRENT_SLIDE_TYPE === 'activity' && CURRENT_ACTIVITY_TYPE) {
+            renderActivity(CURRENT_ACTIVITY_TYPE, ACTIVITY_CONFIG);
+        }
+    } catch (err) {
+        console.error('Initial renderActivity error:', err);
     }
 
     function renderActivity(type, config) {
-        const titleEl = document.getElementById('activity-title');
-        const contentEl = document.getElementById('activity-content');
-        const template = (config && config.template) ? config.template : type;
+        try {
+            const titleEl = document.getElementById('activity-title');
+            const contentEl = document.getElementById('activity-content');
+            if (!titleEl || !contentEl) { console.error('Activity elements not found'); return; }
+            const template = (config && config.template) ? config.template : type;
 
-        switch(template) {
-            case 'sprint': renderSprint(titleEl, contentEl); break;
-            case 'decompose': renderDecompose(titleEl, contentEl); break;
-            case 'quiz': renderQuiz(titleEl, contentEl, config); break;
-            case 'commitment': renderCommitment(titleEl, contentEl); break;
-            case 'sort_stats': renderSortStats(titleEl, contentEl, config); break;
-            default: renderLegacyActivity(type, config, titleEl, contentEl); break;
+            switch(template) {
+                case 'sprint': renderSprint(titleEl, contentEl); break;
+                case 'decompose': renderDecompose(titleEl, contentEl); break;
+                case 'quiz': renderQuiz(titleEl, contentEl, config); break;
+                case 'commitment': renderCommitment(titleEl, contentEl); break;
+                case 'sort_stats': renderSortStats(titleEl, contentEl, config); break;
+                default: renderLegacyActivity(type, config, titleEl, contentEl); break;
+            }
+        } catch (err) {
+            console.error('renderActivity error:', err);
         }
     }
 
@@ -827,33 +860,36 @@
     }
 
     function showCorrectAnswers(data) {
+        console.log('showCorrectAnswers called, activity_type:', CURRENT_ACTIVITY_TYPE);
         const revealEl = document.getElementById('answers-reveal');
-        if (!revealEl) return;
+        if (!revealEl) { console.log('answers-reveal element not found'); return; }
         revealEl.style.display = 'block';
 
-        let html = '<div style="background:rgba(0,0,0,0.85);border:2px solid #52B788;border-radius:12px;padding:16px;">';
+        let html = '<div style="background:rgba(0,0,0,0.85);border:2px solid #52B788;border-radius:12px;padding:16px;max-height:50vh;overflow-y:auto;-webkit-overflow-scrolling:touch;">';
         html += '<h4 style="color:#52B788;margin-bottom:12px;font-size:18px;">📋 Correct Answers</h4>';
 
-        if (CURRENT_ACTIVITY_TYPE === 'sprint' || CURRENT_ACTIVITY_TYPE === 'decompose') {
+        const actType = CURRENT_ACTIVITY_TYPE || (ACTIVITY_CONFIG && ACTIVITY_CONFIG.template) || '';
+
+        if (actType === 'sprint' || actType === 'decompose') {
             html += '<div style="display:flex;flex-direction:column;gap:8px;">';
-            const activityData = ACTIVITIES[CURRENT_ACTIVITY_TYPE === 'sprint' ? 'sprint' : 'decompose'];
+            const activityData = ACTIVITIES[actType === 'sprint' ? 'sprint' : 'decompose'];
             activityData.items.forEach((item, i) => {
                 const userAns = myAnswers[String(i)];
                 let correctLabel = '';
-                if (CURRENT_ACTIVITY_TYPE === 'sprint') {
+                if (actType === 'sprint') {
                     const bin = activityData.bins.find(b => b.id === item.bin);
                     correctLabel = bin ? bin.name : item.bin;
                 } else {
                     correctLabel = activityData.timeline[item.slot];
                 }
-                const isCorrect = userAns === (CURRENT_ACTIVITY_TYPE === 'sprint' ? item.bin : String(item.slot));
+                const isCorrect = userAns === (actType === 'sprint' ? item.bin : String(item.slot));
                 html += '<div style="padding:10px 14px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.25)' : 'rgba(231,111,81,0.25)') + ';border:2px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
                 html += '<span style="color:#fff;font-weight:600;">' + item.emoji + ' ' + item.name + '</span>';
                 html += '<span style="float:right;color:#fff;font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + correctLabel + '</span>';
                 html += '</div>';
             });
             html += '</div>';
-        } else if (CURRENT_ACTIVITY_TYPE === 'quiz') {
+        } else if (actType === 'quiz') {
             html += '<div style="display:flex;flex-direction:column;gap:8px;">';
             const questions = ACTIVITIES.quiz.questions;
             questions.forEach((q, i) => {
@@ -865,7 +901,7 @@
                 html += '</div>';
             });
             html += '</div>';
-        } else if (CURRENT_ACTIVITY_TYPE === 'sort_stats') {
+        } else if (actType === 'sort_stats') {
             html += '<div style="display:flex;flex-direction:column;gap:8px;">';
             const statements = ACTIVITIES.sort_stats.statements;
             statements.forEach((s, i) => {
@@ -878,13 +914,16 @@
                 html += '</div>';
             });
             html += '</div>';
+        } else {
+            html += '<p style="color:#fff">Activity type: ' + actType + '</p>';
         }
 
         html += '</div>';
         revealEl.innerHTML = html;
+        console.log('answers rendered for type:', actType);
     }
 
-    connectSSE();
+    try { connectSSE(); } catch (err) { console.error('Failed to start SSE:', err); setTimeout(connectSSE, 3000); }
     </script>
 </body>
 </html>
