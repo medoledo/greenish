@@ -389,6 +389,7 @@
         });
         const isCorrect = correct === total;
         showResult(isCorrect, correct + '/' + total, isCorrect ? 10 : (correct > 0 ? 5 : 0));
+        myAnswers = sprintAnswers;
         submitActivity('sprint', { answer: JSON.stringify(sprintAnswers), is_correct: isCorrect, points_earned: isCorrect ? 10 : (correct > 0 ? 5 : 0) });
     }
 
@@ -832,20 +833,6 @@
         html += '</div>';
         revealEl.innerHTML = html;
     }
-
-    // Heartbeat — check if still in session (handles kicks)
-    function checkStillInSession() {
-        fetch('/session/' + SESSION_CODE + '/check/')
-        .then(r => r.json())
-        .then(data => {
-            if (!data.valid || data.status === 'ended') {
-                window.location.href = '/session/' + SESSION_CODE + '/join/';
-            }
-        })
-        .catch(() => {});
-    }
-    setInterval(checkStillInSession, 5000);
-    checkStillInSession();
 
     connectSSE();
     </script>

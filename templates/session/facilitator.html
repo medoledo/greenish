@@ -722,6 +722,7 @@
                     updateActivityBadge();
                     if (activityActive && currentSlideData && currentSlideData.slide_type === 'activity') {
                         renderFacilitatorActivity(currentSlideData.activity_type, currentSlideData.activity_config);
+                        refreshLiveStats();
                     } else {
                         hideFacilitatorActivity();
                     }
