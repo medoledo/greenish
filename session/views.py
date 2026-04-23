@@ -145,7 +145,7 @@ def sse_stream(request, code):
 
     def event_stream():
         last_index = -1
-        last_activity = False
+        last_activity = None
         last_status = ''
         import time
         while True:
@@ -153,15 +153,17 @@ def sse_stream(request, code):
             current_index = session.current_slide_index
             activity_active = session.activity_active
             current_status = session.status
-            if current_index != last_index or activity_active != last_activity or current_status != last_status:
-                data = json.dumps({
-                    'slide_index': current_index,
-                    'activity_active': activity_active,
-                    'status': current_status,
-                })
-                yield f"data: {data}\n\n"
+            if current_index != last_index:
+                data = json.dumps({'slide_index': current_index, 'total_slides': session.slides.filter(is_active=True).count()})
+                yield f"event: slide_change\ndata: {data}\n\n"
                 last_index = current_index
+            if activity_active != last_activity:
+                data = json.dumps({'activity_active': activity_active})
+                yield f"event: activity_toggle\ndata: {data}\n\n"
                 last_activity = activity_active
+            if current_status != last_status:
+                data = json.dumps({'status': current_status})
+                yield f"event: session_status\ndata: {data}\n\n"
                 last_status = current_status
             time.sleep(1)
 

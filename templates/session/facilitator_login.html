@@ -4,34 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Facilitator Login - Greenish</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=4">
+    <link rel="stylesheet" href="/static/css/session.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
-        body { display: flex; align-items: center; justify-content: center; }
+        body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #0d3320 0%, #1a4731 50%, #379583 100%); }
     </style>
 </head>
-<body class="join-page">
-    <div class="form-container">
-        <div class="form-logo">
-            <img src="/static/img/logo.svg?v=4" alt="Greenish" class="logo-img-small">
+<body>
+    <div class="glass-card" style="text-align:center;">
+        <div class="form-logo" style="margin-bottom:16px;">
+            <img src="/static/img/logo.svg?v=5" alt="Greenish" style="width:64px;height:64px;filter:brightness(0) invert(1);">
         </div>
-        <h1>Facilitator Access</h1>
-        <p class="form-subtitle">{{ session.title }}</p>
-        <p class="form-code">Code: <strong>{{ session.code }}</strong></p>
+        <h1 style="color:#fff;">Facilitator Access</h1>
+        <p class="form-subtitle" style="color:rgba(255,255,255,0.8);">{{ session.title }}</p>
+        <p class="form-code" style="color:rgba(255,255,255,0.9);">Code: <strong style="color:#fff;">{{ session.code }}</strong></p>
 
         {% if error %}
-        <div class="form-error">{{ error }}</div>
+        <div class="form-error" style="background:rgba(255,200,200,0.2);border:1px solid rgba(255,100,100,0.3);color:#FFD4D4;">{{ error }}</div>
         {% endif %}
 
         <form method="post">
             {% csrf_token %}
             <div class="form-group">
-                <input type="password" id="facilitator_password" name="facilitator_password" class="form-input" placeholder="Enter password" required autofocus>
+                <input type="password" id="facilitator_password" name="facilitator_password" class="form-input" placeholder="Enter password" required autofocus style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff;">
             </div>
-            <button type="submit" class="btn btn-primary btn-large btn-full">Enter</button>
+            <button type="submit" class="btn btn-accent btn-large btn-full" style="background:linear-gradient(135deg,#52B788,#379583);">🔑 Enter</button>
         </form>
 
-        <a href="/session/" class="back-link">← Back</a>
+        <a href="/session/" class="back-link" style="color:rgba(255,255,255,0.7);">← Back</a>
     </div>
 </body>
 </html>

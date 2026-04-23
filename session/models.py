@@ -36,14 +36,11 @@ class Slide(models.Model):
         ('activity', 'Activity'),
     ]
     ACTIVITY_TYPE_CHOICES = [
-        ('poll', 'Poll'),
-        ('sort', 'Sort'),
-        ('guess', 'Guess Timeline'),
-        ('discuss', 'Discussion Wall'),
-        ('commit', 'Commitment Wall'),
-        ('match', 'Definition Match'),
-        ('problem', 'Problem Identification'),
-        ('case_study', 'Case Study / Transfer Station'),
+        ('sprint', '♻️ Waste Sorting Sprint'),
+        ('decompose', '⏳ Decomposition Race'),
+        ('quiz', '🌍 Plastic vs Planet Quiz'),
+        ('commitment', '💚 Green Commitment'),
+        ('sort_stats', '📊 Sort the Stats'),
     ]
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='slides')
     order = models.PositiveIntegerField(default=0)

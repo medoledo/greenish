@@ -4,14 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if slide %}Edit Slide{% else %}Add Slide{% endif %} - Greenish CMS</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=4">
-    <link rel="stylesheet" href="/static/css/cms.css?v=4">
+    <link rel="stylesheet" href="/static/css/session.css?v=5">
+    <link rel="stylesheet" href="/static/css/cms.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        .template-card {
+            border: 2px solid var(--primary-pale);
+            border-radius: var(--radius);
+            padding: 16px;
+            cursor: pointer;
+            transition: var(--transition);
+            margin-bottom: 8px;
+        }
+        .template-card:hover { border-color: var(--primary); background: var(--primary-tint); }
+        .template-card.selected { border-color: var(--primary); background: var(--primary-tint); box-shadow: 0 0 0 3px rgba(55,149,131,0.2); }
+        .template-card h4 { margin-bottom: 4px; }
+        .template-card p { font-size: 13px; color: var(--text-muted); margin: 0; }
+    </style>
 </head>
 <body class="cms-page">
     <header class="cms-header">
         <div class="cms-header-left">
-            <img src="/static/img/logo.svg?v=4" alt="Greenish" class="cms-logo">
+            <img src="/static/img/logo.svg?v=5" alt="Greenish" class="cms-logo">
             <h1>{% if slide %}Edit Slide{% else %}Add Slide{% endif %}</h1>
         </div>
         <div class="cms-header-right">
@@ -74,7 +88,11 @@
                 </div>
             </div>
 
-            <!-- Activity Config Sections -->
+            <div class="form-section activity-config" id="config-template-info" style="display:none;">
+                <h3>🎮 Pre-built Activity</h3>
+                <p style="color:var(--text-muted);margin-bottom:12px;">This activity comes with pre-loaded content. No configuration needed — just add it and go!</p>
+            </div>
+
             <div class="form-section activity-config" id="config-poll" style="display:none;">
                 <h3>🧩 Poll Configuration</h3>
                 <div class="form-group">
@@ -88,22 +106,6 @@
                 <div class="form-group">
                     <label for="poll_correct">Correct Option Index (0-based)</label>
                     <input type="number" id="poll_correct" name="poll_correct" class="form-input" value="{% if slide.activity_config.correct %}{{ slide.activity_config.correct }}{% endif %}" placeholder="e.g., 0">
-                </div>
-            </div>
-
-            <div class="form-section activity-config" id="config-sort" style="display:none;">
-                <h3>♻️ Sort Configuration</h3>
-                <div class="form-group">
-                    <label for="sort_items">Items (comma-separated)</label>
-                    <input type="text" id="sort_items" name="sort_items" class="form-input" placeholder="e.g., Newspaper, Plastic Bottle, Banana Peel, Aluminum Can">
-                </div>
-                <div class="form-group">
-                    <label for="sort_bins">Bins (comma-separated)</label>
-                    <input type="text" id="sort_bins" name="sort_bins" class="form-input" placeholder="e.g., Reuse, Recycle, Dispose">
-                </div>
-                <div class="form-group">
-                    <label for="sort_correct">Correct Matches (item:bin; separated)</label>
-                    <input type="text" id="sort_correct" name="sort_correct" class="form-input" placeholder="Newspaper:Recycle; Banana Peel:Dispose; Plastic Bottle:Recycle">
                 </div>
             </div>
 
@@ -139,14 +141,6 @@
                 </div>
             </div>
 
-            <div class="form-section activity-config" id="config-commit" style="display:none;">
-                <h3>💪 Commitment Wall Configuration</h3>
-                <div class="form-group">
-                    <label for="commit_prompt">Prompt</label>
-                    <input type="text" id="commit_prompt" name="commit_prompt" class="form-input" value="{% if slide.activity_config.prompt %}{{ slide.activity_config.prompt }}{% else %}I will...{% endif %}" placeholder="e.g., I will...">
-                </div>
-            </div>
-
             <div class="form-section activity-config" id="config-match" style="display:none;">
                 <h3>🧩 Definition Match Configuration</h3>
                 <div class="form-group">
@@ -167,26 +161,6 @@
                 </div>
             </div>
 
-            <div class="form-section activity-config" id="config-problem" style="display:none;">
-                <h3>🔍 Problem Identification Configuration</h3>
-                <div class="form-group">
-                    <label for="problem_prompt">Prompt</label>
-                    <input type="text" id="problem_prompt" name="problem_prompt" class="form-input" value="{% if slide.activity_config.prompt %}{{ slide.activity_config.prompt }}{% else %}What problems do you see?{% endif %}">
-                </div>
-            </div>
-
-            <div class="form-section activity-config" id="config-case_study" style="display:none;">
-                <h3>📋 Case Study / Transfer Station Configuration</h3>
-                <div class="form-group">
-                    <label for="case_description">Case Description</label>
-                    <textarea id="case_description" name="case_description" class="form-input form-textarea" rows="6" placeholder="Describe the case study...">{% if slide.activity_config.description %}{{ slide.activity_config.description }}{% endif %}</textarea>
-                </div>
-                <div class="form-group">
-                    <label for="case_questions">Questions (one per line)</label>
-                    <textarea id="case_questions" name="case_questions" class="form-input form-textarea" rows="4" placeholder="One question per line">{% if slide.activity_config.questions %}{{ slide.activity_config.questions|join:'\n' }}{% endif %}</textarea>
-                </div>
-            </div>
-
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary btn-large">💾 Save Slide</button>
                 <a href="{% url 'cms_slides' code=session.code %}" class="btn btn-outline btn-large">Cancel</a>
@@ -195,6 +169,9 @@
     </main>
 
     <script>
+        const TEMPLATE_TYPES = ['sprint', 'decompose', 'quiz', 'commitment', 'sort_stats'];
+        const CONFIG_TYPES = ['poll', 'guess', 'discuss', 'match'];
+
         function toggleActivityFields() {
             const isActivity = document.getElementById('slide_type').value === 'activity';
             document.getElementById('activity-type-group').style.display = isActivity ? 'block' : 'none';
@@ -208,7 +185,10 @@
         function toggleActivityConfig() {
             hideAllConfigs();
             const type = document.getElementById('activity_type').value;
-            if (type) {
+            if (!type) return;
+            if (TEMPLATE_TYPES.includes(type)) {
+                document.getElementById('config-template-info').style.display = 'block';
+            } else {
                 const config = document.getElementById('config-' + type);
                 if (config) config.style.display = 'block';
             }

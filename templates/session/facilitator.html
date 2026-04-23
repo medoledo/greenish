@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Facilitator - {{ session.title }}</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=4">
+    <link rel="stylesheet" href="/static/css/session.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="facilitator-page">
     <header class="facilitator-header">
         <div class="header-left">
-            <img src="/static/img/logo.svg?v=4" alt="Greenish" class="logo-facilitator">
+            <img src="/static/img/logo.svg?v=5" alt="Greenish" class="logo-facilitator">
             <h1 class="header-title">{{ session.title }}</h1>
         </div>
         <div class="header-right">
@@ -34,7 +34,12 @@
                 {% if current_slide.slide_type == 'activity' and current_slide.activity_type %}
                 <div class="activity-badge">
                     <span class="activity-icon">
-                        {% if current_slide.activity_type == 'poll' %}📊
+                        {% if current_slide.activity_type == 'sprint' %}♻️
+                        {% elif current_slide.activity_type == 'decompose' %}⏳
+                        {% elif current_slide.activity_type == 'quiz' %}🌍
+                        {% elif current_slide.activity_type == 'commitment' %}💚
+                        {% elif current_slide.activity_type == 'sort_stats' %}📊
+                        {% elif current_slide.activity_type == 'poll' %}📊
                         {% elif current_slide.activity_type == 'sort' %}♻️
                         {% elif current_slide.activity_type == 'guess' %}⏳
                         {% elif current_slide.activity_type == 'discuss' %}💬
@@ -120,12 +125,18 @@
 
         function connectSSE() {
             eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
-            eventSource.onmessage = function(event) {
+            eventSource.addEventListener('slide_change', function(event) {
+                location.reload();
+            });
+            eventSource.addEventListener('activity_toggle', function(event) {
+                location.reload();
+            });
+            eventSource.addEventListener('session_status', function(event) {
                 const data = JSON.parse(event.data);
                 if (data.status === 'ended') {
                     window.location.href = '/session/';
                 }
-            };
+            });
             eventSource.onerror = function() {
                 setTimeout(connectSSE, 3000);
             };

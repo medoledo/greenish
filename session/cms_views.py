@@ -75,47 +75,35 @@ def cms_slide_edit(request, code, slide_id=None):
         time_hint = data.get('time_hint') or None
         order = int(data.get('order', 0))
 
+        TEMPLATE_ACTIVITY_TYPES = ['sprint', 'decompose', 'quiz', 'commitment', 'sort_stats']
         activity_config = None
         if slide_type == 'activity' and activity_type:
-            config = {}
-            if activity_type == 'poll':
-                config['question'] = data.get('poll_question', '')
-                config['options'] = [opt.strip() for opt in data.get('poll_options', '').split(',') if opt.strip()]
-                correct_str = data.get('poll_correct', '')
-                config['correct'] = int(correct_str) if correct_str.isdigit() else None
-            elif activity_type == 'sort':
-                config['items'] = [item.strip() for item in data.get('sort_items', '').split(',') if item.strip()]
-                config['bins'] = [bin.strip() for bin in data.get('sort_bins', '').split(',') if bin.strip()]
-                config['correct_bins'] = {}
-                correct_str = data.get('sort_correct', '')
-                for pair in correct_str.split(';'):
-                    if ':' in pair:
-                        k, v = pair.split(':', 1)
-                        config['correct_bins'][k.strip()] = v.strip()
-            elif activity_type == 'guess':
-                config['question'] = data.get('guess_question', '')
-                config['item'] = data.get('guess_item', '')
-                config['options'] = [opt.strip() for opt in data.get('guess_options', '').split(',') if opt.strip()]
-                config['correct'] = data.get('guess_correct', '')
-            elif activity_type == 'discuss':
-                config['prompt'] = data.get('discuss_prompt', '')
-                config['max_chars'] = int(data.get('discuss_max_chars', 280))
-            elif activity_type == 'commit':
-                config['prompt'] = data.get('commit_prompt', 'I will...')
-            elif activity_type == 'match':
-                config['pairs'] = []
-                pair_count = int(data.get('match_pair_count', 0))
-                for i in range(pair_count):
-                    term = data.get(f'match_term_{i}', '')
-                    definition = data.get(f'match_definition_{i}', '')
-                    if term and definition:
-                        config['pairs'].append({'term': term, 'definition': definition})
-            elif activity_type == 'problem':
-                config['prompt'] = data.get('problem_prompt', 'What problems do you see?')
-            elif activity_type == 'case_study':
-                config['description'] = data.get('case_description', '')
-                config['questions'] = [q.strip() for q in data.get('case_questions', '').split('\n') if q.strip()]
-            activity_config = config if config else None
+            if activity_type in TEMPLATE_ACTIVITY_TYPES:
+                activity_config = {'template': activity_type}
+            else:
+                config = {}
+                if activity_type == 'poll':
+                    config['question'] = data.get('poll_question', '')
+                    config['options'] = [opt.strip() for opt in data.get('poll_options', '').split(',') if opt.strip()]
+                    correct_str = data.get('poll_correct', '')
+                    config['correct'] = int(correct_str) if correct_str.isdigit() else None
+                elif activity_type == 'guess':
+                    config['question'] = data.get('guess_question', '')
+                    config['item'] = data.get('guess_item', '')
+                    config['options'] = [opt.strip() for opt in data.get('guess_options', '').split(',') if opt.strip()]
+                    config['correct'] = data.get('guess_correct', '')
+                elif activity_type == 'discuss':
+                    config['prompt'] = data.get('discuss_prompt', '')
+                    config['max_chars'] = int(data.get('discuss_max_chars', 280))
+                elif activity_type == 'match':
+                    config['pairs'] = []
+                    pair_count = int(data.get('match_pair_count', 0))
+                    for i in range(pair_count):
+                        term = data.get(f'match_term_{i}', '')
+                        definition = data.get(f'match_definition_{i}', '')
+                        if term and definition:
+                            config['pairs'].append({'term': term, 'definition': definition})
+                activity_config = config if config else None
 
         image = request.FILES.get('image')
         if slide:

@@ -4,35 +4,41 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ session.title }} - Greenish</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=4">
+    <link rel="stylesheet" href="/static/css/session.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="participant-page">
-    <header class="participant-header">
-        <img src="/static/img/logo.svg?v=4" alt="Greenish" class="logo-participant">
-        <div class="participant-info">
-            <span class="participant-avatar">{{ participant.avatar }}</span>
-            <span class="participant-name">{{ participant.name }}</span>
+    <div class="particle-layer" id="bg-particles"></div>
+
+    <div class="p-topbar">
+        <div class="p-avatar-ring">{{ participant.avatar }}</div>
+        <div class="p-player-info">
+            <div class="p-player-name">{{ participant.name }}</div>
         </div>
-        <div class="participant-score">
-            <span class="score-label">Score</span>
-            <span class="score-value" id="my-score">{{ participant.total_points }}</span>
+        <div class="p-score-box">
+            <span class="p-score-icon">🌿</span>
+            <span class="p-score-num" id="my-score">{{ participant.total_points }}</span>
         </div>
-        <div class="participant-streak" id="streak-display" style="display:{% if participant.streak >= 2 %}flex{% else %}none{% endif %}">
+        <div class="p-streak-badge" id="streak-badge" style="display:{% if participant.streak >= 2 %}flex{% else %}none{% endif %}">
             🔥 <span id="my-streak">{{ participant.streak }}</span>
         </div>
-    </header>
+        <div class="p-badges-strip" id="my-badges">
+            {% for badge in participant.badges.all %}
+            <div class="p-badge-icon" title="{{ badge.name }}">{{ badge.icon }}</div>
+            {% endfor %}
+        </div>
+    </div>
 
-    <main class="participant-main" id="participant-main">
-        <div class="progress-bar">
+    <div class="p-slide-wrapper">
+        <div class="p-progress-bar">
             {% for slide in slides %}
-            <div class="progress-dot {% if forloop.counter0 == current_index %}active{% elif forloop.counter0 < current_index %}done{% endif %} {% if slide.slide_type == 'activity' %}dot-activity{% endif %}"></div>
+            <div class="p-progress-dot {% if forloop.counter0 == current_index %}active{% elif forloop.counter0 < current_index %}done{% endif %} {% if slide.slide_type == 'activity' %}activity{% endif %}"></div>
             {% endfor %}
         </div>
 
-        <div class="slide-area" id="slide-area">
+        <div class="p-slide-card {% if current_slide and current_slide.shocking_fact %}shocking{% endif %}" id="slide-card">
             {% if current_slide %}
-            <div class="participant-slide {% if current_slide.shocking_fact %}shocking{% endif %}" id="participant-slide" data-slide-id="{{ current_slide.id }}" data-activity-type="{{ current_slide.activity_type|default_if_none:'' }}">
+            <div id="slide-content">
                 {% if current_slide.title %}
                 <h2 class="p-slide-title {% if current_slide.shocking_fact %}shocking-text{% endif %}">{{ current_slide.title }}</h2>
                 {% endif %}
@@ -44,109 +50,20 @@
 
             {% if current_slide.slide_type == 'activity' and session.activity_active %}
             <div class="activity-panel" id="activity-panel">
-                {% if current_slide.activity_type == 'poll' %}
-                <div class="activity-poll" id="poll-activity">
-                    <h3 class="activity-title">{{ current_slide.activity_config.question|default:"Vote!" }}</h3>
-                    <div class="poll-options" id="poll-options">
-                        {% for option in current_slide.activity_config.options %}
-                        <button class="poll-option" data-index="{{ forloop.counter0 }}" onclick="submitPoll({{ forloop.counter0 }})">{{ option }}</button>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% elif current_slide.activity_type == 'sort' %}
-                <div class="activity-sort" id="sort-activity">
-                    <h3 class="activity-title">Sort the items</h3>
-                    <div class="sort-items" id="sort-items">
-                        {% for item in current_slide.activity_config.items %}
-                        <div class="sort-item" draggable="true" data-item="{{ item }}">{{ item }}</div>
-                        {% endfor %}
-                    </div>
-                    <div class="sort-bins">
-                        {% for bin in current_slide.activity_config.bins %}
-                        <div class="sort-bin" data-bin="{{ bin }}">
-                            <h4>{{ bin }}</h4>
-                            <div class="bin-dropzone" data-bin="{{ bin }}"></div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <button class="btn btn-primary btn-full" onclick="submitSort()">Submit</button>
-                </div>
-                {% elif current_slide.activity_type == 'guess' %}
-                <div class="activity-guess" id="guess-activity">
-                    <h3 class="activity-title">{{ current_slide.activity_config.question|default:"How long does it take?" }}</h3>
-                    <p class="guess-item">{{ current_slide.activity_config.item|default:"" }}</p>
-                    <div class="guess-options" id="guess-options">
-                        {% for option in current_slide.activity_config.options %}
-                        <button class="guess-option" data-value="{{ option }}" onclick="submitGuess('{{ option }}')">{{ option }}</button>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% elif current_slide.activity_type == 'discuss' %}
-                <div class="activity-discuss" id="discuss-activity">
-                    <h3 class="activity-title">{{ current_slide.activity_config.prompt|default:"Share your thoughts" }}</h3>
-                    <div class="discuss-wall" id="discuss-wall"></div>
-                    <div class="discuss-input-area">
-                        <textarea id="discuss-input" class="discuss-input" placeholder="Share your thoughts..." maxlength="{{ current_slide.activity_config.max_chars|default:280 }}"></textarea>
-                        <button class="btn btn-primary" onclick="submitPost('discuss')">Post</button>
-                    </div>
-                </div>
-                {% elif current_slide.activity_type == 'commit' %}
-                <div class="activity-commit" id="commit-activity">
-                    <h3 class="activity-title">{{ current_slide.activity_config.prompt|default:"I will..." }}</h3>
-                    <div class="commit-wall" id="commit-wall"></div>
-                    <div class="commit-input-area">
-                        <textarea id="commit-input" class="commit-input" placeholder="I will..." maxlength="280"></textarea>
-                        <button class="btn btn-accent" onclick="submitPost('commit')">💚 Commit</button>
-                    </div>
-                </div>
-                {% elif current_slide.activity_type == 'match' %}
-                <div class="activity-match" id="match-activity">
-                    <h3 class="activity-title">Match the terms</h3>
-                    <div class="match-area" id="match-area"></div>
-                    <button class="btn btn-primary btn-full" onclick="submitMatch()">Check Answers</button>
-                </div>
-                {% elif current_slide.activity_type == 'problem' %}
-                <div class="activity-problem" id="problem-activity">
-                    <h3 class="activity-title">What problems do you see?</h3>
-                    <div class="discuss-wall" id="problem-wall"></div>
-                    <div class="discuss-input-area">
-                        <textarea id="problem-input" class="discuss-input" placeholder="What problems do you notice?" maxlength="280"></textarea>
-                        <button class="btn btn-primary" onclick="submitPost('discuss')">Share</button>
-                    </div>
-                </div>
-                {% elif current_slide.activity_type == 'case_study' %}
-                <div class="activity-case" id="case-activity">
-                    <h3 class="activity-title">Case Study</h3>
-                    <div class="case-description">{{ current_slide.activity_config.description|default:"" }}</div>
-                    <div class="case-questions">
-                        {% for question in current_slide.activity_config.questions %}
-                        <div class="case-question">
-                            <p>{{ question }}</p>
-                            <textarea class="case-input" data-q="{{ forloop.counter0 }}" placeholder="Your answer..."></textarea>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <button class="btn btn-primary btn-full" onclick="submitCaseStudy()">Submit</button>
-                </div>
-                {% endif %}
+                <h3 class="activity-title" id="activity-title"></h3>
+                <div id="activity-content"></div>
             </div>
             {% endif %}
 
             {% else %}
-            <div class="slide-empty">
+            <div class="p-slide-empty">
                 <div class="empty-icon">🌿</div>
-                <h2>Waiting for the session to start...</h2>
+                <h2>Waiting to start...</h2>
                 <p>The facilitator will begin shortly</p>
             </div>
             {% endif %}
         </div>
-
-        <div class="participant-badges" id="my-badges">
-            {% for badge in participant.badges.all %}
-            <span class="badge-icon" title="{{ badge.name }}">{{ badge.icon }}</span>
-            {% endfor %}
-        </div>
-    </main>
+    </div>
 
     <div class="badge-notification" id="badge-notification" style="display:none;">
         <div class="badge-popup">
@@ -156,209 +73,509 @@
         </div>
     </div>
 
+    <div class="act-result-overlay" id="result-overlay" style="display:none;">
+        <div class="act-result-card">
+            <div class="result-emoji" id="result-emoji">✅</div>
+            <div class="result-title" id="result-title">Correct!</div>
+            <div class="result-points" id="result-points">+10</div>
+        </div>
+    </div>
+
     <script>
-        const SESSION_CODE = '{{ session.code }}';
-        const PARTICIPANT_ID = {{ participant.id }};
-        const CSRF_TOKEN = '{{ csrf_token }}';
-        const CURRENT_SLIDE_ID = {% if current_slide %}{{ current_slide.id }}{% else %}0{% endif %};
+    const SESSION_CODE = '{{ session.code }}';
+    const PARTICIPANT_ID = {{ participant.id }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+    const CURRENT_SLIDE_ID = {% if current_slide %}{{ current_slide.id }}{% else %}0{% endif %};
+    const CURRENT_INDEX = {{ current_index }};
+    const CURRENT_SLIDE_TYPE = '{{ current_slide.slide_type|default_if_none:"" }}';
+    const CURRENT_ACTIVITY_TYPE = '{{ current_slide.activity_type|default_if_none:"" }}';
+    const ACTIVITY_ACTIVE = {{ session.activity_active|lower }};
+    const ACTIVITY_CONFIG = {% if current_slide and current_slide.activity_config %}{{ current_slide.activity_config|safe }}{% else %}null{% endif %};
 
-        let eventSource = null;
-
-        function connectSSE() {
-            eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
-            eventSource.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                if (data.status === 'ended') {
-                    window.location.href = '/session/';
-                    return;
-                }
-                if (data.slide_index !== undefined) {
-                    location.reload();
-                }
-            };
-            eventSource.onerror = function() {
-                setTimeout(connectSSE, 3000);
-            };
+    const ACTIVITIES = {
+        sprint: {
+            title: '♻️ Sort the Waste!',
+            items: [
+                { name: 'Orange Peel', bin: 'compose', emoji: '🍊' },
+                { name: 'Plastic Bag', bin: 'landfill', emoji: '🛍️' },
+                { name: 'Glass Bottle', bin: 'recycle', emoji: '🍶' },
+                { name: 'Newspaper', bin: 'recycle', emoji: '📰' },
+                { name: 'Banana Peel', bin: 'compose', emoji: '🍌' },
+                { name: 'Aluminum Can', bin: 'recycle', emoji: '🥫' },
+            ],
+            bins: [
+                { id: 'recycle', name: '♻️ Recycle', color: '#52B788' },
+                { id: 'compose', name: '🌱 Compost', color: '#95D5B2' },
+                { id: 'landfill', name: '🗑️ Landfill', color: '#E76F51' },
+            ]
+        },
+        decompose: {
+            title: '⏳ How Long Does It Take?',
+            items: [
+                { name: 'Banana Peel', time: '2-5 weeks', slot: 0, emoji: '🍌' },
+                { name: 'Newspaper', time: '6 weeks', slot: 1, emoji: '📰' },
+                { name: 'Cigarette Butt', time: '10 years', slot: 2, emoji: '🚬' },
+                { name: 'Plastic Bag', time: '500 years', slot: 3, emoji: '🛍️' },
+                { name: 'Glass Bottle', time: '1M+ years', slot: 4, emoji: '🍶' },
+            ],
+            timeline: ['~1 Month', '~2 Months', '~10 Years', '~500 Years', '~1M Years']
+        },
+        quiz: {
+            title: '🌍 Plastic vs Planet',
+            questions: [
+                { q: 'How many plastic bags are used worldwide every minute?', options: ['10,000', '100,000', '1 million', '10 million'], correct: 2 },
+                { q: 'What percentage of plastic is actually recycled globally?', options: ['9%', '25%', '50%', '75%'], correct: 0 },
+                { q: 'How long does a plastic bottle take to decompose?', options: ['10 years', '75 years', '450 years', '1,000 years'], correct: 2 },
+                { q: 'Egypt generates approximately how many tons of waste per year?', options: ['5 million', '26 million', '50 million', '100 million'], correct: 1 },
+                { q: 'What percentage of Egypt\'s waste is food/organic waste?', options: ['10%', '25%', '50%', '75%'], correct: 2 },
+                { q: 'Which ocean has the largest garbage patch?', options: ['Atlantic', 'Indian', 'Pacific', 'Arctic'], correct: 2 },
+                { q: 'How many marine animals are killed by plastic each year?', options: ['100K', '1 million', '10 million', '100 million'], correct: 1 },
+                { q: 'A single plastic bag is used for an average of...', options: ['5 minutes', '30 minutes', '12 hours', '1 day'], correct: 2 },
+                { q: 'What is the most common item found in beach cleanups?', options: ['Straws', 'Bottles', 'Cigarette butts', 'Bags'], correct: 2 },
+                { q: 'Recycling 1 aluminum can saves enough energy to...', options: ['Run a TV for 1 hour', 'Power a light bulb for 20 hours', 'Run a computer for 3 hours', 'Charge a phone twice'], correct: 1 },
+            ]
+        },
+        commitment: {
+            title: '💚 Make Your Green Commitment!',
+            prompt: 'I will...',
+            placeholder: 'Share your environmental commitment...'
+        },
+        sort_stats: {
+            title: '📊 True or False?',
+            statements: [
+                { text: 'Egypt generates about 26 million tons of waste per year', answer: true },
+                { text: '50% of waste in Egypt is food/organic waste', answer: true },
+                { text: 'Plastic makes up 80% of Egypt\'s waste by volume', answer: false, fact: 'Plastic is about 12-15% by volume' },
+                { text: 'Recycling rate in Egypt is about 12%', answer: true },
+                { text: 'A plastic bag takes 500 years to decompose', answer: true },
+                { text: 'Egypt has one of the highest waste generation rates in Africa', answer: false, fact: 'Egypt\'s rate is moderate for the region' },
+                { text: 'Only 9% of all plastic ever made has been recycled', answer: true },
+                { text: 'Burning waste in open air is common in Egypt', answer: true },
+            ]
         }
+    };
 
-        function submitPoll(optionIndex) {
-            submitActivity('poll', {answer: optionIndex, is_correct: null});
+    let activitySubmitted = false;
+    let eventSource = null;
+
+    // floating background particles
+    (function(){
+        const c = document.getElementById('bg-particles');
+        if (!c) return;
+        const emojis = ['🌿','🍃','🌱','💚','♻️','🌍','🌸','💧'];
+        for (let i = 0; i < 15; i++) {
+            const s = document.createElement('span');
+            s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+            s.style.left = Math.random() * 100 + '%';
+            s.style.top = Math.random() * 100 + '%';
+            s.style.animationDelay = (Math.random() * 8) + 's';
+            s.style.animationDuration = (8 + Math.random() * 6) + 's';
+            c.appendChild(s);
         }
+    })();
 
-        function submitGuess(value) {
-            const config = {% if current_slide and current_slide.activity_config %}{{ current_slide.activity_config|safe }}{% else %}{}{% endif %};
-            const isCorrect = config.correct === value;
-            submitActivity('guess', {answer: value, is_correct: isCorrect});
-        }
-
-        function submitSort() {
-            const bins = document.querySelectorAll('.sort-bin');
-            const result = {};
-            bins.forEach(bin => {
-                const items = bin.querySelectorAll('.sort-item');
-                items.forEach(item => {
-                    result[item.dataset.item] = bin.dataset.bin;
-                });
-            });
-            const config = {% if current_slide and current_slide.activity_config %}{{ current_slide.activity_config|safe }}{% else %}{}{% endif %};
-            let correct = 0;
-            let total = 0;
-            if (config.correct_bins) {
-                for (const [item, bin] of Object.entries(result)) {
-                    total++;
-                    if (config.correct_bins[item] === bin) correct++;
-                }
+    // SSE — named events
+    function connectSSE() {
+        eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
+        eventSource.addEventListener('slide_change', function(e) {
+            const data = JSON.parse(e.data);
+            if (data.slide_index !== undefined && data.slide_index != CURRENT_INDEX) {
+                location.reload();
             }
-            submitActivity('sort', {answer: JSON.stringify(result), is_correct: correct === total && total > 0});
-        }
-
-        function submitPost(type) {
-            const input = document.getElementById(type === 'discuss' ? 'discuss-input' : type === 'commit' ? 'commit-input' : 'problem-input');
-            const content = input.value.trim();
-            if (!content) return;
-
-            fetch('/session/' + SESSION_CODE + '/post/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': CSRF_TOKEN,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    content: content,
-                    slide_id: CURRENT_SLIDE_ID,
-                }),
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    input.value = '';
-                    loadPosts();
-                    showPointsAnimation(5);
-                }
-            });
-        }
-
-        function submitActivity(type, payload) {
-            fetch('/session/' + SESSION_CODE + '/submit/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': CSRF_TOKEN,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    slide_id: CURRENT_SLIDE_ID,
-                    activity_type: type,
-                    ...payload,
-                }),
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('my-score').textContent = data.total_points;
-                    document.getElementById('my-streak').textContent = data.streak;
-                    const streakEl = document.getElementById('streak-display');
-                    if (data.streak >= 2) streakEl.style.display = 'flex';
-                    if (data.points_earned > 0) showPointsAnimation(data.points_earned);
-                    if (data.badges && data.badges.length > 0) updateBadges(data.badges);
-                    disableCurrentActivity();
-                }
-            });
-        }
-
-        function submitMatch() {
-            const pairs = {};
-            document.querySelectorAll('.match-pair').forEach(pair => {
-                const term = pair.dataset.term;
-                const answer = pair.querySelector('.match-answer').value;
-                pairs[term] = answer;
-            });
-            const config = {% if current_slide and current_slide.activity_config %}{{ current_slide.activity_config|safe }}{% else %}{}{% endif %};
-            let correct = 0;
-            let total = 0;
-            if (config.pairs) {
-                config.pairs.forEach(pair => {
-                    total++;
-                    if (pairs[pair.term] === pair.definition) correct++;
-                });
+        });
+        eventSource.addEventListener('activity_toggle', function(e) {
+            const data = JSON.parse(e.data);
+            location.reload();
+        });
+        eventSource.addEventListener('session_status', function(e) {
+            const data = JSON.parse(e.data);
+            if (data.status === 'ended') {
+                window.location.href = '/session/';
             }
-            submitActivity('match', {answer: JSON.stringify(pairs), is_correct: correct === total && total > 0});
-        }
+        });
+        eventSource.onerror = function() {
+            setTimeout(connectSSE, 3000);
+        };
+    }
 
-        function submitCaseStudy() {
-            const answers = {};
-            document.querySelectorAll('.case-input').forEach(input => {
-                answers[input.dataset.q] = input.value;
+    // Render activity based on template type
+    if (ACTIVITY_ACTIVE && CURRENT_SLIDE_TYPE === 'activity' && CURRENT_ACTIVITY_TYPE) {
+        renderActivity(CURRENT_ACTIVITY_TYPE, ACTIVITY_CONFIG);
+    }
+
+    function renderActivity(type, config) {
+        const titleEl = document.getElementById('activity-title');
+        const contentEl = document.getElementById('activity-content');
+        const template = (config && config.template) ? config.template : type;
+
+        switch(template) {
+            case 'sprint': renderSprint(titleEl, contentEl); break;
+            case 'decompose': renderDecompose(titleEl, contentEl); break;
+            case 'quiz': renderQuiz(titleEl, contentEl, config); break;
+            case 'commitment': renderCommitment(titleEl, contentEl); break;
+            case 'sort_stats': renderSortStats(titleEl, contentEl, config); break;
+            default: renderLegacyActivity(type, config, titleEl, contentEl); break;
+        }
+    }
+
+    function renderSprint(titleEl, contentEl) {
+        const data = ACTIVITIES.sprint;
+        titleEl.textContent = data.title;
+        let binsHTML = '<div class="sort-game-bins">';
+        data.bins.forEach(b => {
+            binsHTML += '<div class="sort-game-bin" data-bin="' + b.id + '" style="border-color:' + b.color + '33"><h4 style="color:' + b.color + '">' + b.name + '</h4><div class="bin-dropzone" data-bin="' + b.id + '"></div></div>';
+        });
+        binsHTML += '</div>';
+        let itemsHTML = '<div class="sort-game-items" id="sprint-items">';
+        data.items.forEach((item, i) => {
+            itemsHTML += '<div class="sort-game-item" draggable="true" data-item="' + i + '" data-correct="' + item.bin + '">' + item.emoji + ' ' + item.name + '</div>';
+        });
+        itemsHTML += '</div>';
+        contentEl.innerHTML = itemsHTML + binsHTML + '<button class="btn btn-primary btn-large btn-full" onclick="submitSprint()">♻️ Submit Sorting</button>';
+        initSprintDrag();
+    }
+
+    let sprintAnswers = {};
+    function initSprintDrag() {
+        document.querySelectorAll('.sort-game-item').forEach(item => {
+            item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.item); item.style.opacity = '0.5'); });
+            item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+        });
+        document.querySelectorAll('.bin-dropzone').forEach(zone => {
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.closest('.sort-game-bin').classList.add('bin-over'); });
+            zone.addEventListener('dragleave', e => { zone.closest('.sort-game-bin').classList.remove('bin-over'); });
+            zone.addEventListener('drop', e => {
+                e.preventDefault(); zone.closest('.sort-game-bin').classList.remove('bin-over');
+                const idx = e.dataTransfer.getData('text/plain');
+                const bin = zone.dataset.bin;
+                sprintAnswers[idx] = bin;
+                const dragItem = document.querySelector('[data-item="' + idx + '"]');
+                if (dragItem) { dragItem.style.display = 'none'; zone.appendChild(dragItem); dragItem.style.display = ''; dragItem.draggable = false; dragItem.style.opacity = '0.7'; }
             });
-            submitActivity('case_study', {answer: JSON.stringify(answers), is_correct: true});
-        }
+        });
+    }
+    function submitSprint() {
+        if (activitySubmitted) return;
+        const data = ACTIVITIES.sprint;
+        let correct = 0, total = data.items.length;
+        data.items.forEach((item, i) => {
+            if (sprintAnswers[String(i)] === item.bin) correct++;
+        });
+        const isCorrect = correct === total;
+        showResult(isCorrect, correct + '/' + total, isCorrect ? 10 : (correct > 0 ? 5 : 0));
+        submitActivity('sprint', { answer: JSON.stringify(sprintAnswers), is_correct: isCorrect });
+    }
 
-        function loadPosts() {
-            fetch('/session/' + SESSION_CODE + '/posts/?slide_id=' + CURRENT_SLIDE_ID)
-            .then(r => r.json())
-            .then(data => {
-                const walls = ['discuss-wall', 'commit-wall', 'problem-wall'];
-                walls.forEach(wallId => {
-                    const wall = document.getElementById(wallId);
-                    if (wall) {
-                        wall.innerHTML = data.posts.map(p => `
-                            <div class="post-item">
-                                <span class="post-avatar">${p.avatar}</span>
-                                <span class="post-content">${p.content}</span>
-                                <span class="post-time">${p.created_at}</span>
-                            </div>
-                        `).join('');
-                    }
-                });
+    function renderDecompose(titleEl, contentEl) {
+        const data = ACTIVITIES.decompose;
+        titleEl.textContent = data.title;
+        let itemsHTML = '<div class="decompose-items" id="decompose-items">';
+        data.items.forEach((item, i) => {
+            itemsHTML += '<div class="decompose-item" draggable="true" data-idx="' + i + '" data-slot="' + item.slot + '">' + item.emoji + ' ' + item.name + '</div>';
+        });
+        itemsHTML += '</div>';
+        let timelineHTML = '<div class="decompose-timeline" id="decompose-timeline">';
+        data.timeline.forEach((t, i) => {
+            timelineHTML += '<div class="decompose-slot" data-slot="' + i + '"><h5>' + t + '</h5><div class="slot-item" id="slot-content-' + i + '"></div></div>';
+        });
+        timelineHTML += '</div>';
+        contentEl.innerHTML = itemsHTML + timelineHTML + '<button class="btn btn-primary btn-large btn-full" onclick="submitDecompose()">⏳ Check Answers</button>';
+        initDecomposeDrag();
+    }
+
+    let decomposeAnswers = {};
+    function initDecomposeDrag() {
+        document.querySelectorAll('.decompose-item').forEach(item => {
+            item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.idx); item.style.opacity = '0.5'); });
+            item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+        });
+        document.querySelectorAll('.decompose-slot').forEach(slot => {
+            slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('slot-over'); });
+            slot.addEventListener('dragleave', e => { slot.classList.remove('slot-over'); });
+            slot.addEventListener('drop', e => {
+                e.preventDefault(); slot.classList.remove('slot-over');
+                const idx = e.dataTransfer.getData('text/plain');
+                const slotIdx = slot.dataset.slot;
+                decomposeAnswers[idx] = slotIdx;
+                const dragItem = document.querySelector('[data-idx="' + idx + '"]');
+                const slotContent = document.getElementById('slot-content-' + slotIdx);
+                if (dragItem && slotContent) { slotContent.innerHTML = dragItem.innerHTML; dragItem.style.opacity = '0.3'; dragItem.draggable = false; }
             });
-        }
+        });
+    }
+    function submitDecompose() {
+        if (activitySubmitted) return;
+        const data = ACTIVITIES.decompose;
+        let correct = 0;
+        data.items.forEach((item, i) => {
+            if (decomposeAnswers[String(i)] == item.slot) correct++;
+        });
+        const isCorrect = correct === data.items.length;
+        showResult(isCorrect, correct + '/' + data.items.length, isCorrect ? 10 : (correct > 0 ? 5 : 0));
+        submitActivity('decompose', { answer: JSON.stringify(decomposeAnswers), is_correct: isCorrect });
+    }
 
-        function showPointsAnimation(points) {
-            const el = document.createElement('div');
-            el.className = 'points-float';
-            el.textContent = '+' + points;
-            document.body.appendChild(el);
-            setTimeout(() => el.remove(), 1500);
-        }
-
-        function disableCurrentActivity() {
-            const panel = document.getElementById('activity-panel');
-            if (panel) {
-                panel.classList.add('activity-submitted');
-                panel.querySelectorAll('button, input, textarea').forEach(el => el.disabled = true);
+    let quizState = { current: 0, score: 0, answers: [] };
+    function renderQuiz(titleEl, contentEl, config) {
+        const data = ACTIVITIES.quiz;
+        // check if config has custom questions (for backward compat)
+        const questions = (config && config.questions) ? config.questions : data.questions;
+        quizState = { current: 0, score: 0, answers: [], total: questions.length };
+        titleEl.textContent = data.title;
+        showQuizQuestion(titleEl, contentEl, questions);
+    }
+    function showQuizQuestion(titleEl, contentEl, questions) {
+        const q = questions[quizState.current];
+        const letters = ['A', 'B', 'C', 'D'];
+        let progHTML = '<div class="quiz-progress">';
+        questions.forEach((_, i) => {
+            let cls = 'quiz-progress-dot';
+            if (i < quizState.current) cls += ' done';
+            else if (i === quizState.current) cls += ' current';
+            progHTML += '<div class="' + cls + '"></div>';
+        });
+        progHTML += '</div>';
+        let qHTML = '<div class="quiz-counter">Question ' + (quizState.current + 1) + ' of ' + questions.length + '</div>';
+        qHTML += '<div class="activity-title">' + q.q + '</div>';
+        qHTML += '<div class="quiz-options">';
+        q.options.forEach((opt, i) => {
+            qHTML += '<button class="quiz-option" onclick="answerQuiz(' + i + ',' + q.correct + ')"><span class="quiz-letter">' + letters[i] + '</span> ' + opt + '</button>';
+        });
+        qHTML += '</div>';
+        contentEl.innerHTML = progHTML + qHTML;
+    }
+    function answerQuiz(chosen, correct) {
+        if (activitySubmitted) return;
+        const config = ACTIVITY_CONFIG || {};
+        const questions = (config && config.questions) ? config.questions : ACTIVITIES.quiz.questions;
+        const isCorrect = chosen === correct;
+        if (isCorrect) { quizState.score += 10; }
+        quizState.answers.push(chosen);
+        const btns = document.querySelectorAll('.quiz-option');
+        btns.forEach((btn, i) => { btn.disabled = true; btn.style.opacity = '0.6'; if (i === correct) { btn.style.borderColor = '#52B788'; btn.style.background = 'rgba(82,183,136,0.3)'; } if (i === chosen && !isCorrect) { btn.style.borderColor = '#E76F51'; btn.style.background = 'rgba(231,111,81,0.3)'; } });
+        setTimeout(() => {
+            quizState.current++;
+            if (quizState.current < questions.length) {
+                showQuizQuestion(document.getElementById('activity-title'), document.getElementById('activity-content'), questions);
+            } else {
+                const pct = Math.round((quizState.score / (questions.length * 10)) * 100);
+                const isCorrect = pct >= 60;
+                showResult(isCorrect, quizState.score + ' pts (' + pct + '%)', quizState.score);
+                submitActivity('quiz', { answer: JSON.stringify(quizState.answers), is_correct: isCorrect });
             }
-        }
+        }, 800);
+    }
 
-        function updateBadges(badges) {
-            const container = document.getElementById('my-badges');
-            container.innerHTML = badges.map(b => `<span class="badge-icon">${b}</span>`).join('');
-            const lastBadge = badges[badges.length - 1];
-            showBadgeNotification(lastBadge);
-        }
-
-        function showBadgeNotification(icon) {
-            const badgeNames = {
-                '🌱': {name: 'First Bloom', desc: 'First correct answer!'},
-                '🔥': {name: 'On Fire', desc: '3 correct in a row!'},
-                '♻️': {name: 'Sorting Pro', desc: '5 correct answers!'},
-                '🌊': {name: 'Wave Maker', desc: 'Joined the discussion!'},
-                '💪': {name: 'Commitment Keeper', desc: 'Made a commitment!'},
-                '🏆': {name: 'Session Star', desc: 'Top 3 overall!'},
-            };
-            const badge = badgeNames[icon] || {name: 'Badge', desc: 'Achievement unlocked!'};
-            document.getElementById('badge-popup-icon').textContent = icon;
-            document.getElementById('badge-popup-name').textContent = badge.name;
-            document.getElementById('badge-popup-desc').textContent = badge.desc;
-            const notif = document.getElementById('badge-notification');
-            notif.style.display = 'flex';
-            setTimeout(() => notif.style.display = 'none', 3000);
-        }
-
-        {% if current_slide and current_slide.slide_type == 'activity' and current_slide.activity_type in 'discuss,commit,problem' %}
-        setInterval(loadPosts, 3000);
+    function renderCommitment(titleEl, contentEl) {
+        const data = ACTIVITIES.commitment;
+        titleEl.textContent = data.title;
+        contentEl.innerHTML = '<div class="commit-wall" id="commit-wall-player"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-fancy" placeholder="' + data.placeholder + '" maxlength="280"></textarea><button class="btn btn-accent" onclick="submitCommitment()">💚 Commit</button></div>';
         loadPosts();
-        {% endif %}
+        setInterval(loadPosts, 3000);
+    }
+    function submitCommitment() {
+        if (activitySubmitted) return;
+        const input = document.getElementById('commit-input-fancy');
+        const content = input.value.trim();
+        if (!content) return;
+        input.value = '';
+        fetch('/session/' + SESSION_CODE + '/post/', {
+            method: 'POST', headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
+            body: JSON.stringify({ content: content, slide_id: CURRENT_SLIDE_ID })
+        }).then(r => r.json()).then(data => {
+            if (data.success) { showResult(true, '💚 Committed!', 5); loadPosts(); }
+        });
+        submitActivity('commitment', { answer: content, is_correct: true });
+    }
 
-        connectSSE();
+    let statsState = { current: 0, score: 0 };
+    function renderSortStats(titleEl, contentEl, config) {
+        const data = ACTIVITIES.sort_stats;
+        const statements = (config && config.statements) ? config.statements : data.statements;
+        statsState = { current: 0, score: 0, total: statements.length };
+        showStatQuestion(titleEl, contentEl, statements);
+    }
+    function showStatQuestion(titleEl, contentEl, statements) {
+        const s = statements[statsState.current];
+        let progHTML = '<div class="quiz-progress">';
+        statements.forEach((_, i) => {
+            let cls = 'quiz-progress-dot';
+            if (i < statsState.current) cls += ' done';
+            else if (i === statsState.current) cls += ' current';
+            progHTML += '<div class="' + cls + '"></div>';
+        });
+        progHTML += '</div>';
+        let qHTML = '<div class="quiz-counter">' + (statsState.current + 1) + ' of ' + statements.length + '</div>';
+        qHTML += '<div class="tf-statement">' + s.text + '</div>';
+        qHTML += '<div class="tf-buttons"><button class="tf-btn tf-btn-true" onclick="answerStat(true)">✅ True</button><button class="tf-btn tf-btn-false" onclick="answerStat(false)">❌ False</button></div>';
+        contentEl.innerHTML = progHTML + qHTML;
+    }
+    function answerStat(answer) {
+        if (activitySubmitted && statsState.current > 0) return;
+        const config = ACTIVITY_CONFIG || {};
+        const statements = (config && config.statements) ? config.statements : ACTIVITIES.sort_stats.statements;
+        const s = statements[statsState.current];
+        const isCorrect = answer === s.answer;
+        if (isCorrect) statsState.score += 10;
+        if (!isCorrect && s.fact) {
+            const el = document.createElement('div');
+            el.style.cssText = 'margin-top:8px;padding:8px;background:rgba(231,111,81,0.2);border-radius:8px;color:#FFD4D4;font-size:14px;text-align:center;';
+            el.textContent = '💡 ' + s.fact; document.getElementById('activity-content').appendChild(el);
+        }
+        setTimeout(() => {
+            statsState.current++;
+            if (statsState.current < statements.length) {
+                showStatQuestion(document.getElementById('activity-title'), document.getElementById('activity-content'), statements);
+            } else {
+                const pct = Math.round((statsState.score / (statements.length * 10)) * 100);
+                const finalCorrect = pct >= 60;
+                showResult(finalCorrect, statsState.score + ' pts', statsState.score);
+                submitActivity('sort_stats', { answer: JSON.stringify({score: statsState.score, total: statements.length}), is_correct: finalCorrect });
+            }
+        }, 1200);
+    }
+
+    // Legacy activity renderer for old config-based activities
+    function renderLegacyActivity(type, config, titleEl, contentEl) {
+        if (!config) { contentEl.innerHTML = '<p style="color:rgba(255,255,255,0.6)">Activity loading...</p>'; return; }
+        switch(type) {
+            case 'poll': renderLegacyPoll(config, titleEl, contentEl); break;
+            case 'discuss': renderLegacyDiscuss(config, titleEl, contentEl); break;
+            case 'commit': renderLegacyCommit(config, titleEl, contentEl); break;
+            case 'guess': renderLegacyGuess(config, titleEl, contentEl); break;
+            default: titleEl.textContent = type.charAt(0).toUpperCase() + type.slice(1) + ' Activity';
+                contentEl.innerHTML = '<p style="color:rgba(255,255,255,0.6)">Activity ready</p>'; break;
+        }
+    }
+    function renderLegacyPoll(config, titleEl, contentEl) {
+        titleEl.textContent = config.question || 'Vote!';
+        let html = '<div class="poll-options">';
+        (config.options || []).forEach((opt, i) => { html += '<button class="poll-option" onclick="submitLegacyPoll(' + i + ')">' + opt + '</button>'; });
+        html += '</div>';
+        contentEl.innerHTML = html;
+    }
+    function submitLegacyPoll(idx) {
+        if (activitySubmitted) return;
+        submitActivity('poll', { answer: idx, is_correct: null });
+        activitySubmitted = true;
+        document.getElementById('activity-panel').classList.add('activity-submitted');
+    }
+    function renderLegacyDiscuss(config, titleEl, contentEl) {
+        titleEl.textContent = config.prompt || 'Share your thoughts';
+        contentEl.innerHTML = '<div class="discuss-wall-player commit-wall" id="discuss-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="discuss-input-p" placeholder="Share your thoughts..." maxlength="' + (config.max_chars || 280) + '"></textarea><button class="btn btn-primary" onclick="submitLegacyDiscuss()">Post</button></div>';
+        loadPosts(); setInterval(loadPosts, 3000);
+    }
+    function submitLegacyDiscuss() {
+        const input = document.getElementById('discuss-input-p');
+        const content = input.value.trim();
+        if (!content) return;
+        input.value = '';
+        fetch('/session/' + SESSION_CODE + '/post/', {
+            method: 'POST', headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
+            body: JSON.stringify({ content: content, slide_id: CURRENT_SLIDE_ID })
+        }).then(r => r.json()).then(data => { if (data.success) { showResult(true, '💚 Posted!', 5); loadPosts(); } });
+        submitActivity('discuss', { answer: content, is_correct: true });
+    }
+    function renderLegacyCommit(config, titleEl, contentEl) {
+        titleEl.textContent = config.prompt || 'I will...';
+        contentEl.innerHTML = '<div class="commit-wall commit-wall-player" id="commit-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-p" placeholder="I will..." maxlength="280"></textarea><button class="btn btn-accent" onclick="submitLegacyCommit()">💚 Commit</button></div>';
+        loadPosts(); setInterval(loadPosts, 3000);
+    }
+    function submitLegacyCommit() {
+        const input = document.getElementById('commit-input-p');
+        const content = input.value.trim();
+        if (!content) return;
+        input.value = '';
+        fetch('/session/' + SESSION_CODE + '/post/', {
+            method: 'POST', headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
+            body: JSON.stringify({ content: content, slide_id: CURRENT_SLIDE_ID })
+        }).then(r => r.json()).then(data => { if (data.success) { showResult(true, '💚 Committed!', 5); loadPosts(); } });
+        submitActivity('commit', { answer: content, is_correct: true });
+    }
+    function renderLegacyGuess(config, titleEl, contentEl) {
+        titleEl.textContent = config.question || 'How long does it take?';
+        if (config.item) { contentEl.innerHTML += '<div class="guess-item">' + config.item + '</div>'; }
+        let html = '<div class="guess-options">';
+        (config.options || []).forEach(opt => { html += '<button class="guess-option" onclick="submitLegacyGuess(\'' + opt.replace(/'/g, "\\'") + '\',\'' + config.correct.replace(/'/g, "\\'") + '\')">' + opt + '</button>'; });
+        html += '</div>';
+        contentEl.innerHTML += html;
+    }
+    function submitLegacyGuess(value, correct) {
+        if (activitySubmitted) return;
+        const isCorrect = value === correct;
+        showResult(isCorrect, isCorrect ? 'Correct!' : 'The answer was: ' + correct, isCorrect ? 10 : 0);
+        submitActivity('guess', { answer: value, is_correct: isCorrect });
+    }
+
+    function submitActivity(type, payload) {
+        if (activitySubmitted) return;
+        activitySubmitted = true;
+        fetch('/session/' + SESSION_CODE + '/submit/', {
+            method: 'POST', headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
+            body: JSON.stringify({ slide_id: CURRENT_SLIDE_ID, activity_type: type, ...payload })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                document.getElementById('my-score').textContent = data.total_points;
+                document.getElementById('my-score').classList.add('bump');
+                setTimeout(() => document.getElementById('my-score').classList.remove('bump'), 500);
+                document.getElementById('my-streak').textContent = data.streak;
+                const streakBadge = document.getElementById('streak-badge');
+                if (data.streak >= 2) streakBadge.style.display = 'flex';
+                if (data.badges && data.badges.length > 0) updateBadges(data.badges);
+            }
+        });
+    }
+
+    function showResult(isCorrect, text, points) {
+        const overlay = document.getElementById('result-overlay');
+        document.getElementById('result-emoji').textContent = isCorrect ? '✅' : '❌';
+        document.getElementById('result-title').textContent = text;
+        document.getElementById('result-points').textContent = points > 0 ? '+' + points : '';
+        overlay.style.display = 'flex';
+        setTimeout(() => { overlay.style.display = 'none'; }, 2000);
+    }
+
+    function loadPosts() {
+        const slideId = CURRENT_SLIDE_ID;
+        fetch('/session/' + SESSION_CODE + '/posts/?slide_id=' + slideId)
+        .then(r => r.json()).then(data => {
+            const walls = ['commit-wall-player', 'discuss-wall-p', 'commit-wall-p'];
+            walls.forEach(wallId => {
+                const wall = document.getElementById(wallId);
+                if (wall) {
+                    wall.innerHTML = data.posts.map(p => '<div class="wall-post"><span class="wall-post-avatar">' + p.avatar + '</span><span class="wall-post-content">' + p.content + '</span></div>').join('');
+                }
+            });
+        });
+    }
+
+    function updateBadges(badges) {
+        const container = document.getElementById('my-badges');
+        container.innerHTML = badges.map(b => '<div class="p-badge-icon">' + b + '</div>').join('');
+        const lastBadge = badges[badges.length - 1];
+        showBadgeNotification(lastBadge);
+    }
+
+    const badgeNames = {
+        '🌱': {name: 'First Bloom', desc: 'First correct answer!'},
+        '🔥': {name: 'On Fire', desc: '3 correct in a row!'},
+        '♻️': {name: 'Sorting Pro', desc: '5 correct answers!'},
+        '🌊': {name: 'Wave Maker', desc: 'Joined the discussion!'},
+        '💪': {name: 'Commitment Keeper', desc: 'Made a commitment!'},
+        '🏆': {name: 'Session Star', desc: 'Top 3 overall!'},
+    };
+
+    function showBadgeNotification(icon) {
+        const badge = badgeNames[icon] || {name: 'Badge', desc: 'Achievement unlocked!'};
+        document.getElementById('badge-popup-icon').textContent = icon;
+        document.getElementById('badge-popup-name').textContent = badge.name;
+        document.getElementById('badge-popup-desc').textContent = badge.desc;
+        const notif = document.getElementById('badge-notification');
+        notif.style.display = 'flex';
+        setTimeout(() => notif.style.display = 'none', 3000);
+    }
+
+    connectSSE();
     </script>
 </body>
 </html>

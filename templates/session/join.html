@@ -4,53 +4,69 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Join Session - Greenish</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=4">
+    <link rel="stylesheet" href="/static/css/session.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="join-page">
-    <div class="form-container">
-        <div class="form-logo">
-            <img src="/static/img/logo.svg?v=4" alt="Greenish" class="logo-img-small">
+    <div class="particle-layer" id="particles-join"></div>
+
+    <div class="glass-card">
+        <div class="form-logo" style="text-align:center;margin-bottom:16px;">
+            <img src="/static/img/logo.svg?v=5" alt="Greenish" style="width:64px;height:64px;filter:brightness(0) invert(1);">
         </div>
-        <h1>Join Session</h1>
-        <p class="form-subtitle">{{ session.title }}</p>
-        <p class="form-code">Code: <strong>{{ session.code }}</strong></p>
+        <h1 style="text-align:center;">Join Session</h1>
+        <p class="form-subtitle" style="text-align:center;">{{ session.title }}</p>
+        <div class="join-code-display">{{ session.code }}</div>
 
         {% if error %}
-        <div class="form-error">{{ error }}</div>
+        <div class="form-error" style="background:rgba(255,200,200,0.2);border:1px solid rgba(255,100,100,0.3);color:#FFD4D4;">{{ error }}</div>
         {% endif %}
 
         <form method="post">
             {% csrf_token %}
             <div class="form-group">
-                <label for="name">Your Name</label>
-                <input type="text" id="name" name="name" placeholder="Enter your name" class="form-input" required maxlength="50">
+                <label for="name" style="color:rgba(255,255,255,0.9);">Your Name</label>
+                <input type="text" id="name" name="name" placeholder="Enter your name" class="form-input" required maxlength="50" autofocus style="background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);color:#fff;">
             </div>
             <div class="form-group">
-                <label>Pick Your Avatar</label>
-                <div class="avatar-grid">
+                <label style="color:rgba(255,255,255,0.9);">Pick Your Avatar</label>
+                <div class="avatar-grid-fancy">
                     {% for emoji, label in avatar_choices %}
-                    <button type="button" class="avatar-btn" data-avatar="{{ emoji }}" title="{{ label }}">{{ emoji }}</button>
+                    <button type="button" class="avatar-btn-fancy" data-avatar="{{ emoji }}" title="{{ label }}">{{ emoji }}</button>
                     {% endfor %}
                 </div>
                 <input type="hidden" id="avatar" name="avatar" value="🌱">
             </div>
-            <button type="submit" class="btn btn-primary btn-large btn-full">
-                👋 Join Session
+            <button type="submit" class="btn btn-accent btn-large btn-full" style="background:linear-gradient(135deg,#52B788,#379583);border:none;font-size:18px;">
+                🌿 Join Session
             </button>
         </form>
 
-        <a href="/session/" class="back-link">← Back to Home</a>
+        <a href="/session/" class="back-link" style="color:rgba(255,255,255,0.7);">← Back to Home</a>
     </div>
 
     <script>
-        document.querySelectorAll('.avatar-btn').forEach(btn => {
+        document.querySelectorAll('.avatar-btn-fancy').forEach(btn => {
             btn.addEventListener('click', function() {
-                document.querySelectorAll('.avatar-btn').forEach(b => b.classList.remove('selected'));
+                document.querySelectorAll('.avatar-btn-fancy').forEach(b => b.classList.remove('selected'));
                 this.classList.add('selected');
                 document.getElementById('avatar').value = this.dataset.avatar;
             });
         });
+
+        const container = document.getElementById('particles-join');
+        if (container) {
+            const emojis = ['🌿', '🍃', '🌱', '💚', '♻️', '🌍', '🌸', '💧'];
+            for (let i = 0; i < 20; i++) {
+                const p = document.createElement('span');
+                p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                p.style.left = Math.random() * 100 + '%';
+                p.style.top = Math.random() * 100 + '%';
+                p.style.animationDelay = (Math.random() * 8) + 's';
+                p.style.animationDuration = (8 + Math.random() * 6) + 's';
+                container.appendChild(p);
+            }
+        }
     </script>
 </body>
 </html>
