@@ -4,10 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ session.title }} - Greenish</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=5">
+    <link rel="stylesheet" href="/static/css/session.css?v=7">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="participant-page">
+
+    <!-- Tree Decorations -->
+    <svg class="tree-decoration tree-left" viewBox="0 0 100 200" preserveAspectRatio="xMidYMax">
+        <path d="M50 200 L50 120 M50 120 L20 80 M50 120 L80 80 M50 90 L30 50 M50 90 L70 50 M50 60 L40 20 M50 60 L60 20"
+              stroke="#1a4731" stroke-width="6" fill="none" stroke-linecap="round"/>
+        <circle cx="50" cy="30" r="25" fill="#1a4731" opacity="0.5"/>
+        <circle cx="30" cy="50" r="20" fill="#1a4731" opacity="0.4"/>
+        <circle cx="70" cy="50" r="20" fill="#1a4731" opacity="0.4"/>
+    </svg>
+    <svg class="tree-decoration tree-right" viewBox="0 0 100 200" preserveAspectRatio="xMidYMax">
+        <path d="M50 200 L50 130 M50 130 L25 95 M50 130 L75 95 M50 100 L35 65 M50 100 L65 65 M50 70 L45 35 M50 70 L55 35"
+              stroke="#1a4731" stroke-width="5" fill="none" stroke-linecap="round"/>
+        <circle cx="50" cy="30" r="22" fill="#1a4731" opacity="0.45"/>
+        <circle cx="35" cy="50" r="18" fill="#1a4731" opacity="0.35"/>
+    </svg>
+
+    <!-- Grass Strip -->
+    <div class="grass-strip"></div>
+
+    <!-- Floating Particles -->
     <div class="particle-layer" id="bg-particles"></div>
 
     <div class="p-topbar">
@@ -36,7 +56,7 @@
             {% endfor %}
         </div>
 
-        <div class="p-slide-card {% if current_slide and current_slide.shocking_fact %}shocking{% endif %}" id="slide-card">
+        <div class="p-slide-card dark-glass {% if current_slide and current_slide.shocking_fact %}shocking{% endif %}" id="slide-card">
             {% if current_slide %}
             <div id="slide-content">
                 {% if current_slide.title %}
@@ -162,14 +182,15 @@
     (function(){
         const c = document.getElementById('bg-particles');
         if (!c) return;
-        const emojis = ['🌿','🍃','🌱','💚','♻️','🌍','🌸','💧'];
-        for (let i = 0; i < 15; i++) {
+        const emojis = ['🌿','🍃','🌱','🍀','💚','🌾','🌸','💧','🌍','🦋'];
+        for (let i = 0; i < 30; i++) {
             const s = document.createElement('span');
             s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
             s.style.left = Math.random() * 100 + '%';
             s.style.top = Math.random() * 100 + '%';
-            s.style.animationDelay = (Math.random() * 8) + 's';
-            s.style.animationDuration = (8 + Math.random() * 6) + 's';
+            s.style.animationDelay = (Math.random() * 12) + 's';
+            s.style.animationDuration = (10 + Math.random() * 8) + 's';
+            s.style.fontSize = (24 + Math.random() * 16) + 'px';
             c.appendChild(s);
         }
     })();
@@ -238,21 +259,21 @@
     let sprintAnswers = {};
     function initSprintDrag() {
         document.querySelectorAll('.sort-game-item').forEach(item => {
-            item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.item); item.style.opacity = '0.5'); });
-            item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+        item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.item); item.style.opacity = '0.5'; });
+        item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+    });
+    document.querySelectorAll('.bin-dropzone').forEach(zone => {
+        zone.addEventListener('dragover', e => { e.preventDefault(); zone.closest('.sort-game-bin').classList.add('bin-over'); });
+        zone.addEventListener('dragleave', e => { zone.closest('.sort-game-bin').classList.remove('bin-over'); });
+        zone.addEventListener('drop', e => {
+            e.preventDefault(); zone.closest('.sort-game-bin').classList.remove('bin-over');
+            const idx = e.dataTransfer.getData('text/plain');
+            const bin = zone.dataset.bin;
+            sprintAnswers[idx] = bin;
+            const dragItem = document.querySelector('[data-item="' + idx + '"]');
+            if (dragItem) { dragItem.style.display = 'none'; zone.appendChild(dragItem); dragItem.style.display = ''; dragItem.draggable = false; dragItem.style.opacity = '0.7'; }
         });
-        document.querySelectorAll('.bin-dropzone').forEach(zone => {
-            zone.addEventListener('dragover', e => { e.preventDefault(); zone.closest('.sort-game-bin').classList.add('bin-over'); });
-            zone.addEventListener('dragleave', e => { zone.closest('.sort-game-bin').classList.remove('bin-over'); });
-            zone.addEventListener('drop', e => {
-                e.preventDefault(); zone.closest('.sort-game-bin').classList.remove('bin-over');
-                const idx = e.dataTransfer.getData('text/plain');
-                const bin = zone.dataset.bin;
-                sprintAnswers[idx] = bin;
-                const dragItem = document.querySelector('[data-item="' + idx + '"]');
-                if (dragItem) { dragItem.style.display = 'none'; zone.appendChild(dragItem); dragItem.style.display = ''; dragItem.draggable = false; dragItem.style.opacity = '0.7'; }
-            });
-        });
+    });
     }
     function submitSprint() {
         if (activitySubmitted) return;
@@ -286,8 +307,8 @@
     let decomposeAnswers = {};
     function initDecomposeDrag() {
         document.querySelectorAll('.decompose-item').forEach(item => {
-            item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.idx); item.style.opacity = '0.5'); });
-            item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+        item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.idx); item.style.opacity = '0.5'; });
+        item.addEventListener('dragend', e => { item.style.opacity = '1'; });
         });
         document.querySelectorAll('.decompose-slot').forEach(slot => {
             slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('slot-over'); });

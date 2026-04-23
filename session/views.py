@@ -143,28 +143,60 @@ def join_session(request, code):
 def sse_stream(request, code):
     session = get_object_or_404(Session, code=code)
 
+    def get_slide_data(slide):
+        return {
+            'id': slide.id,
+            'title': slide.title,
+            'content': slide.content,
+            'slide_type': slide.slide_type,
+            'activity_type': slide.activity_type or '',
+            'activity_config': slide.activity_config,
+            'shocking_fact': slide.shocking_fact,
+            'image_url': slide.image.url if slide.image else None,
+        }
+
     def event_stream():
-        last_index = -1
-        last_activity = None
-        last_status = ''
+        session.refresh_from_db()
+        last_index = session.current_slide_index
+        last_activity = session.activity_active
+        last_status = session.status
+        last_result_count = ActivityResult.objects.filter(session=session).count()
         import time
         while True:
             session.refresh_from_db()
             current_index = session.current_slide_index
             activity_active = session.activity_active
             current_status = session.status
+            current_result_count = ActivityResult.objects.filter(session=session).count()
+
+            slides = list(session.slides.filter(is_active=True).order_by('order'))
+            total_slides = len(slides)
+            current_slide = slides[current_index] if current_index < total_slides else None
+
             if current_index != last_index:
-                data = json.dumps({'slide_index': current_index, 'total_slides': session.slides.filter(is_active=True).count()})
+                data = json.dumps({
+                    'slide_index': current_index,
+                    'total_slides': total_slides,
+                    'slide': get_slide_data(current_slide) if current_slide else None,
+                })
                 yield f"event: slide_change\ndata: {data}\n\n"
                 last_index = current_index
+
             if activity_active != last_activity:
                 data = json.dumps({'activity_active': activity_active})
                 yield f"event: activity_toggle\ndata: {data}\n\n"
                 last_activity = activity_active
+
             if current_status != last_status:
                 data = json.dumps({'status': current_status})
                 yield f"event: session_status\ndata: {data}\n\n"
                 last_status = current_status
+
+            if current_result_count != last_result_count:
+                data = json.dumps({'result_count': current_result_count})
+                yield f"event: activity_result\ndata: {data}\n\n"
+                last_result_count = current_result_count
+
             time.sleep(1)
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
@@ -338,6 +370,42 @@ def get_leaderboard(request, code):
         'badges': list(p.badges.values_list('icon', flat=True)),
     } for p in participants]
     return JsonResponse({'leaderboard': leaderboard})
+
+
+@require_GET
+@never_cache
+def get_activity_stats(request, code):
+    session = get_object_or_404(Session, code=code)
+    current_index = session.current_slide_index
+    slides = list(session.slides.filter(is_active=True).order_by('order'))
+    current_slide = slides[current_index] if current_index < len(slides) else None
+    total_participants = session.participants.count()
+
+    stats = {
+        'total': total_participants,
+        'submitted': 0,
+        'correct': None,
+        'avg_points': 0,
+        'posts': [],
+    }
+
+    if current_slide:
+        results = ActivityResult.objects.filter(session=session, slide=current_slide)
+        stats['submitted'] = results.count()
+        correct_results = results.filter(is_correct=True)
+        stats['correct'] = correct_results.count() if correct_results.exists() else None
+        if results.exists():
+            stats['avg_points'] = round(results.aggregate(models.Avg('points_earned'))['points_earned__avg'] or 0)
+
+        if current_slide.activity_type in ('commitment', 'discuss', 'commit'):
+            posts = session.posts.filter(slide=current_slide, is_public=True).order_by('-created_at')[:20]
+            stats['posts'] = [{
+                'name': p.participant.name if p.participant else 'Anonymous',
+                'avatar': p.participant.avatar if p.participant else '\U0001f331',
+                'content': p.content,
+            } for p in posts]
+
+    return JsonResponse(stats)
 
 
 @require_GET
