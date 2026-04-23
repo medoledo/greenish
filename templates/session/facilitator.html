@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Facilitator - {{ session.title }}</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=7">
+    <link rel="stylesheet" href="/static/css/session.css?v=8">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="facilitator-page dark-theme">
 
-    <!-- Tree Decorations -->
     <svg class="tree-decoration tree-left" viewBox="0 0 100 200" preserveAspectRatio="xMidYMax">
         <path d="M50 200 L50 120 M50 120 L20 80 M50 120 L80 80 M50 90 L30 50 M50 90 L70 50 M50 60 L40 20 M50 60 L60 20"
               stroke="#1a4731" stroke-width="6" fill="none" stroke-linecap="round"/>
@@ -24,15 +23,12 @@
         <circle cx="35" cy="50" r="18" fill="#1a4731" opacity="0.35"/>
     </svg>
 
-    <!-- Grass Strip -->
     <div class="grass-strip"></div>
-
-    <!-- Floating Particles -->
     <div class="particle-layer" id="facilitator-particles"></div>
 
     <header class="facilitator-header">
         <div class="header-left">
-            <img src="/static/img/logo.svg?v=7" alt="Greenish" class="logo-facilitator" style="filter:brightness(0) invert(1);">
+            <img src="/static/img/logo.svg?v=8" alt="Greenish" class="logo-facilitator" style="filter:brightness(0) invert(1);">
             <h1 class="header-title">{{ session.title }}</h1>
         </div>
         <div class="header-right">
@@ -76,6 +72,7 @@
                 <div class="fac-activity-panel" id="fac-activity-panel" style="{% if not session.activity_active %}display:none;{% endif %}">
                     <h3 class="activity-title" id="fac-activity-title"></h3>
                     <div id="fac-activity-content"></div>
+                    <button class="btn btn-primary btn-full" id="btn-show-answers" onclick="showAnswers()" style="display:none;margin-top:12px;">📋 Show Correct Answers</button>
                     <div class="fac-live-stats" id="fac-live-stats"></div>
                     <div class="fac-live-feed" id="fac-live-feed"></div>
                 </div>
@@ -112,9 +109,10 @@
                 <div class="action-buttons">
                     {% if session.status == 'waiting' %}
                     <button class="btn btn-primary btn-full" id="btn-start" onclick="sessionAction('start_session')">▶ Start Session</button>
-                    {% elif session.status == 'active' %}
-                    <button class="btn btn-danger btn-full" id="btn-end" onclick="sessionAction('end_session')">⏹ End Session</button>
+                    {% elif session.status == 'ended' %}
+                    <button class="btn btn-primary btn-full" id="btn-restart" onclick="sessionAction('restart_session')">🔄 Restart Session</button>
                     {% endif %}
+                    <button class="btn btn-danger btn-full" id="btn-end" onclick="sessionAction('end_session')">⏹ End Session</button>
                     <button class="btn btn-accent btn-full" id="btn-activity" onclick="toggleActivity()">🏁 Toggle Activity</button>
                     <button class="btn btn-outline btn-full" id="btn-leaderboard" onclick="toggleLeaderboard()">🏆 Leaderboard</button>
                 </div>
@@ -152,7 +150,7 @@
     <script>
         const SESSION_CODE = '{{ session.code }}';
         const TOTAL_SLIDES = {{ total_slides }};
-        const CURRENT_INDEX = {{ current_index }};
+        let CURRENT_INDEX = {{ current_index }};
         const CSRF_TOKEN = '{{ csrf_token }}';
         const IS_ACTIVITY_ACTIVE = {{ session.activity_active|lower }};
         const CURRENT_SLIDE_DATA = {% if current_slide %}{
@@ -173,7 +171,6 @@
         let currentSlideData = CURRENT_SLIDE_DATA;
         let isLoading = false;
 
-        // Activity templates
         const ACTIVITIES = {
             sprint: {
                 title: '♻️ Sort the Waste!',
@@ -237,7 +234,6 @@
             }
         };
 
-        // Floating particles
         (function(){
             const c = document.getElementById('facilitator-particles');
             if (!c) return;
@@ -254,7 +250,6 @@
             }
         })();
 
-        // SSE — named events
         function connectSSE() {
             eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
             eventSource.addEventListener('slide_change', function(event) {
@@ -278,6 +273,12 @@
                 if (data.status === 'ended') {
                     window.location.href = '/session/';
                 }
+                updateSessionButtons(data.status);
+                const statusEl = document.getElementById('session-status');
+                if (statusEl) {
+                    statusEl.textContent = data.status;
+                    statusEl.className = 'session-status status-' + data.status;
+                }
             });
             eventSource.addEventListener('activity_result', function(event) {
                 if (activityActive && currentSlideData && currentSlideData.slide_type === 'activity') {
@@ -290,17 +291,14 @@
         }
 
         function updateSlideDisplay(index, total, slide) {
-            // Update counter
             document.getElementById('current-index').textContent = index + 1;
             document.getElementById('total-slides').textContent = total;
 
-            // Update progress dots
             document.querySelectorAll('#progress-dots .dot').forEach((dot, i) => {
                 dot.classList.remove('active');
                 if (i === index) dot.classList.add('active');
             });
 
-            // Update slide content
             const display = document.getElementById('slide-display');
             if (!slide) {
                 display.innerHTML = '<div class="slide-empty"><div class="empty-icon">🌿</div><h2>Session Ready</h2><p>Use the controls below to start presenting</p></div>';
@@ -309,7 +307,7 @@
 
             let imgHTML = slide.image_url ? '<img src="' + slide.image_url + '" alt="" class="slide-image">' : '';
             let titleHTML = slide.title ? '<h2 class="slide-title' + (slide.shocking_fact ? ' shocking-text' : '') + '">' + slide.title + '</h2>' : '';
-            let bodyHTML = '<div class="slide-body" id="slide-body">' + slide.content.replace(/\n/g, '<br>') + '</div>';
+            let bodyHTML = '<div class="slide-body" id="slide-body">' + (slide.content || '').replace(/\n/g, '<br>') + '</div>';
 
             let activityBadgeHTML = '';
             let activityPanelHTML = '';
@@ -317,14 +315,12 @@
                 const icons = {sprint:'♻️',decompose:'⏳',quiz:'🌍',commitment:'💚',sort_stats:'📊',poll:'📊',sort:'♻️',guess:'⏳',discuss:'💬',commit:'💪',match:'🧩',problem:'🔍',case_study:'📋'};
                 const icon = icons[slide.activity_type] || '🎯';
                 activityBadgeHTML = '<div class="activity-badge" id="activity-badge" style="' + (activityActive ? '' : 'display:none;') + '"><span class="activity-icon" id="activity-icon">' + icon + '</span>Activity: ' + slide.activity_type + '</div>';
-                activityPanelHTML = '<div class="fac-activity-panel" id="fac-activity-panel" style="' + (activityActive ? '' : 'display:none;') + '"><h3 class="activity-title" id="fac-activity-title"></h3><div id="fac-activity-content"></div><div class="fac-live-stats" id="fac-live-stats"></div><div class="fac-live-feed" id="fac-live-feed"></div></div>';
+                activityPanelHTML = '<div class="fac-activity-panel" id="fac-activity-panel" style="' + (activityActive ? '' : 'display:none;') + '"><h3 class="activity-title" id="fac-activity-title"></h3><div id="fac-activity-content"></div><button class="btn btn-primary btn-full" id="btn-show-answers" onclick="showAnswers()" style="display:none;margin-top:12px;">📋 Show Correct Answers</button><div class="fac-live-stats" id="fac-live-stats"></div><div class="fac-live-feed" id="fac-live-feed"></div></div>';
             }
 
             const shockingClass = slide.shocking_fact ? ' shocking' : '';
-            display.innerHTML = '<div class="slide-content dark-glass' + shockingClass + '" id="current-slide" data-slide-id="' + slide.id + '">' +
-                imgHTML + titleHTML + bodyHTML + activityBadgeHTML + activityPanelHTML + '</div>';
+            display.innerHTML = '<div class="slide-content dark-glass' + shockingClass + '" id="current-slide" data-slide-id="' + slide.id + '">' + imgHTML + titleHTML + bodyHTML + activityBadgeHTML + activityPanelHTML + '</div>';
 
-            // Re-trigger animation
             const content = document.querySelector('.slide-content');
             if (content) {
                 content.style.animation = 'none';
@@ -332,7 +328,6 @@
                 content.style.animation = '';
             }
 
-            // Render activity if active
             if (activityActive && slide.slide_type === 'activity' && slide.activity_type) {
                 renderFacilitatorActivity(slide.activity_type, slide.activity_config);
             }
@@ -342,7 +337,15 @@
             const template = (config && config.template) ? config.template : type;
             const titleEl = document.getElementById('fac-activity-title');
             const contentEl = document.getElementById('fac-activity-content');
+            const showBtn = document.getElementById('btn-show-answers');
             if (!titleEl || !contentEl) return;
+
+            // Show "Show Answers" button for games with correct answers
+            if (['sprint','decompose','quiz','sort_stats'].includes(template)) {
+                if (showBtn) showBtn.style.display = 'block';
+            } else {
+                if (showBtn) showBtn.style.display = 'none';
+            }
 
             switch(template) {
                 case 'sprint': renderFacSprint(titleEl, contentEl); break;
@@ -365,46 +368,117 @@
             titleEl.textContent = data.title;
             let binsHTML = '<div class="sort-game-bins">';
             data.bins.forEach(b => {
-                binsHTML += '<div class="sort-game-bin" style="border-color:' + b.color + '33"><h4 style="color:' + b.color + '">' + b.name + '</h4><div class="bin-dropzone"></div></div>';
+                binsHTML += '<div class="sort-game-bin" data-bin="' + b.id + '" style="border-color:' + b.color + '33"><h4 style="color:' + b.color + '">' + b.name + '</h4><div class="bin-dropzone" data-bin="' + b.id + '"></div></div>';
             });
             binsHTML += '</div>';
-            let itemsHTML = '<div class="sort-game-items">';
-            data.items.forEach(item => {
-                itemsHTML += '<div class="sort-game-item">' + item.emoji + ' ' + item.name + '</div>';
+            let itemsHTML = '<div class="sort-game-items" id="sprint-items">';
+            data.items.forEach((item, i) => {
+                itemsHTML += '<div class="sort-game-item" draggable="true" data-item="' + i + '" data-correct="' + item.bin + '">' + item.emoji + ' ' + item.name + '</div>';
             });
             itemsHTML += '</div>';
             contentEl.innerHTML = itemsHTML + binsHTML;
+            initFacSprintDrag();
+        }
+
+        let facSprintAnswers = {};
+        function initFacSprintDrag() {
+            document.querySelectorAll('.sort-game-item').forEach(item => {
+                item.addEventListener('dragstart', e => {
+                    e.dataTransfer.setData('text/plain', item.dataset.item);
+                    item.style.opacity = '0.5';
+                });
+                item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+            });
+            document.querySelectorAll('.bin-dropzone').forEach(zone => {
+                zone.addEventListener('dragover', e => { e.preventDefault(); zone.closest('.sort-game-bin').classList.add('bin-over'); });
+                zone.addEventListener('dragleave', e => { zone.closest('.sort-game-bin').classList.remove('bin-over'); });
+                zone.addEventListener('drop', e => {
+                    e.preventDefault();
+                    zone.closest('.sort-game-bin').classList.remove('bin-over');
+                    const idx = e.dataTransfer.getData('text/plain');
+                    const bin = zone.dataset.bin;
+                    facSprintAnswers[idx] = bin;
+                    const dragItem = document.querySelector('[data-item="' + idx + '"]');
+                    if (dragItem) {
+                        dragItem.remove();
+                        zone.appendChild(dragItem);
+                        dragItem.style.opacity = '0.9';
+                    }
+                });
+            });
         }
 
         function renderFacDecompose(titleEl, contentEl) {
             const data = ACTIVITIES.decompose;
             titleEl.textContent = data.title;
-            let itemsHTML = '<div class="decompose-items">';
-            data.items.forEach(item => {
-                itemsHTML += '<div class="decompose-item">' + item.emoji + ' ' + item.name + '</div>';
+            let itemsHTML = '<div class="decompose-items" id="decompose-items">';
+            data.items.forEach((item, i) => {
+                itemsHTML += '<div class="decompose-item" draggable="true" data-idx="' + i + '" data-slot="' + item.slot + '">' + item.emoji + ' ' + item.name + '</div>';
             });
             itemsHTML += '</div>';
-            let timelineHTML = '<div class="decompose-timeline">';
-            data.timeline.forEach(t => {
-                timelineHTML += '<div class="decompose-slot"><h5>' + t + '</h5><div class="slot-item"></div></div>';
+            let timelineHTML = '<div class="decompose-timeline" id="decompose-timeline">';
+            data.timeline.forEach((t, i) => {
+                timelineHTML += '<div class="decompose-slot" data-slot="' + i + '"><h5>' + t + '</h5><div class="slot-item" id="slot-content-' + i + '"></div></div>';
             });
             timelineHTML += '</div>';
             contentEl.innerHTML = itemsHTML + timelineHTML;
+            initFacDecomposeDrag();
+        }
+
+        let facDecomposeAnswers = {};
+        function initFacDecomposeDrag() {
+            document.querySelectorAll('.decompose-item').forEach(item => {
+                item.addEventListener('dragstart', e => {
+                    e.dataTransfer.setData('text/plain', item.dataset.idx);
+                    item.style.opacity = '0.5';
+                });
+                item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+            });
+            document.querySelectorAll('.decompose-slot').forEach(slot => {
+                slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('slot-over'); });
+                slot.addEventListener('dragleave', e => { slot.classList.remove('slot-over'); });
+                slot.addEventListener('drop', e => {
+                    e.preventDefault();
+                    slot.classList.remove('slot-over');
+                    const idx = e.dataTransfer.getData('text/plain');
+                    const slotIdx = slot.dataset.slot;
+                    facDecomposeAnswers[idx] = slotIdx;
+                    const dragItem = document.querySelector('[data-idx="' + idx + '"]');
+                    if (dragItem) {
+                        dragItem.remove();
+                        const slotContent = document.getElementById('slot-content-' + slotIdx);
+                        if (slotContent) {
+                            slotContent.innerHTML = '';
+                            slotContent.appendChild(dragItem);
+                            dragItem.style.opacity = '0.9';
+                        }
+                    }
+                });
+            });
         }
 
         function renderFacQuiz(titleEl, contentEl, config) {
             const data = ACTIVITIES.quiz;
             const questions = (config && config.questions) ? config.questions : data.questions;
             titleEl.textContent = data.title;
-            let qHTML = '<div class="quiz-counter">Question 1 of ' + questions.length + '</div>';
-            qHTML += '<div class="activity-title" style="font-size:16px;margin-bottom:12px;">' + questions[0].q + '</div>';
-            const letters = ['A', 'B', 'C', 'D'];
-            qHTML += '<div class="quiz-options">';
-            questions[0].options.forEach((opt, i) => {
-                qHTML += '<button class="quiz-option" style="pointer-events:none;opacity:0.7"><span class="quiz-letter">' + letters[i] + '</span> ' + opt + '</button>';
+
+            let html = '<div class="quiz-progress">';
+            questions.forEach((_, i) => {
+                html += '<div class="quiz-progress-dot' + (i === 0 ? ' current' : '') + '"></div>';
             });
-            qHTML += '</div>';
-            contentEl.innerHTML = qHTML;
+            html += '</div>';
+
+            questions.forEach((q, qi) => {
+                const letters = ['A', 'B', 'C', 'D'];
+                html += '<div class="quiz-question-block" style="margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;">';
+                html += '<div style="font-weight:700;margin-bottom:8px;">Q' + (qi+1) + ': ' + q.q + '</div>';
+                html += '<div class="quiz-options">';
+                q.options.forEach((opt, i) => {
+                    html += '<button class="quiz-option" style="pointer-events:none;opacity:0.8"><span class="quiz-letter">' + letters[i] + '</span> ' + opt + '</button>';
+                });
+                html += '</div></div>';
+            });
+            contentEl.innerHTML = html;
         }
 
         function renderFacCommitment(titleEl, contentEl) {
@@ -417,10 +491,26 @@
             const data = ACTIVITIES.sort_stats;
             const statements = (config && config.statements) ? config.statements : data.statements;
             titleEl.textContent = data.title;
-            let qHTML = '<div class="quiz-counter">Statement 1 of ' + statements.length + '</div>';
-            qHTML += '<div class="tf-statement">' + statements[0].text + '</div>';
-            qHTML += '<div class="tf-buttons"><button class="tf-btn tf-btn-true" style="pointer-events:none;opacity:0.7">✅ True</button><button class="tf-btn tf-btn-false" style="pointer-events:none;opacity:0.7">❌ False</button></div>';
-            contentEl.innerHTML = qHTML;
+            let html = '';
+            statements.forEach((s, i) => {
+                html += '<div style="margin-bottom:12px;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;">';
+                html += '<div style="font-weight:700;margin-bottom:8px;">' + (i+1) + '. ' + s.text + '</div>';
+                html += '<div class="tf-buttons"><button class="tf-btn tf-btn-true" style="pointer-events:none;opacity:0.8">✅ True</button><button class="tf-btn tf-btn-false" style="pointer-events:none;opacity:0.8">❌ False</button></div>';
+                html += '</div>';
+            });
+            contentEl.innerHTML = html;
+        }
+
+        function showAnswers() {
+            fetch('/session/' + SESSION_CODE + '/action/show_answers/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    const btn = document.getElementById('btn-show-answers');
+                    if (btn) { btn.textContent = '✅ Answers Shown'; btn.disabled = true; }
+                }
+            });
         }
 
         function refreshLiveStats() {
@@ -475,7 +565,7 @@
         }
 
         function sessionAction(action) {
-            const btnId = action === 'start_session' ? 'btn-start' : action === 'end_session' ? 'btn-end' : null;
+            const btnId = action === 'start_session' ? 'btn-start' : action === 'end_session' ? 'btn-end' : action === 'restart_session' ? 'btn-restart' : null;
             const doFetch = () => fetch('/session/' + SESSION_CODE + '/action/' + action + '/', {
                 method: 'POST',
                 headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
@@ -502,32 +592,32 @@
         }
 
         function updateSessionButtons(status) {
-            const startBtn = document.getElementById('btn-start');
-            const endBtn = document.getElementById('btn-end');
+            const actionsDiv = document.querySelector('.action-buttons');
+            const toggleBtn = document.getElementById('btn-activity');
+            if (!actionsDiv) return;
+
+            // Remove dynamic buttons
+            ['btn-start','btn-restart'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.remove();
+            });
+
             if (status === 'active') {
-                if (startBtn) startBtn.remove();
-                if (!endBtn) {
-                    const actionsDiv = document.querySelector('.action-buttons');
-                    const toggleBtn = document.getElementById('btn-activity');
-                    const newEndBtn = document.createElement('button');
-                    newEndBtn.className = 'btn btn-danger btn-full';
-                    newEndBtn.id = 'btn-end';
-                    newEndBtn.textContent = '\u23F9 End Session';
-                    newEndBtn.onclick = function() { sessionAction('end_session'); };
-                    actionsDiv.insertBefore(newEndBtn, toggleBtn);
-                }
+                // No start/restart button needed, just end
             } else if (status === 'waiting') {
-                if (endBtn) endBtn.remove();
-                if (!startBtn) {
-                    const actionsDiv = document.querySelector('.action-buttons');
-                    const toggleBtn = document.getElementById('btn-activity');
-                    const newStartBtn = document.createElement('button');
-                    newStartBtn.className = 'btn btn-primary btn-full';
-                    newStartBtn.id = 'btn-start';
-                    newStartBtn.textContent = '\u25B6 Start Session';
-                    newStartBtn.onclick = function() { sessionAction('start_session'); };
-                    actionsDiv.insertBefore(newStartBtn, toggleBtn);
-                }
+                const newStartBtn = document.createElement('button');
+                newStartBtn.className = 'btn btn-primary btn-full';
+                newStartBtn.id = 'btn-start';
+                newStartBtn.textContent = '\u25B6 Start Session';
+                newStartBtn.onclick = function() { sessionAction('start_session'); };
+                actionsDiv.insertBefore(newStartBtn, toggleBtn);
+            } else if (status === 'ended') {
+                const newRestartBtn = document.createElement('button');
+                newRestartBtn.className = 'btn btn-primary btn-full';
+                newRestartBtn.id = 'btn-restart';
+                newRestartBtn.textContent = '🔄 Restart Session';
+                newRestartBtn.onclick = function() { sessionAction('restart_session'); };
+                actionsDiv.insertBefore(newRestartBtn, toggleBtn);
             }
         }
 
@@ -629,7 +719,6 @@
             }
         }, 5000);
 
-        // Initial render
         if (activityActive && currentSlideData && currentSlideData.slide_type === 'activity') {
             renderFacilitatorActivity(currentSlideData.activity_type, currentSlideData.activity_config);
         }

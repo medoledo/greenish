@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ session.title }} - Greenish</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=7">
+    <link rel="stylesheet" href="/static/css/session.css?v=8">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="participant-page">
@@ -50,38 +50,39 @@
     </div>
 
     <div class="p-slide-wrapper">
-        <div class="p-progress-bar">
+        <div class="p-progress-bar" id="progress-bar">
             {% for slide in slides %}
             <div class="p-progress-dot {% if forloop.counter0 == current_index %}active{% elif forloop.counter0 < current_index %}done{% endif %} {% if slide.slide_type == 'activity' %}activity{% endif %}"></div>
             {% endfor %}
         </div>
 
         <div class="p-slide-card dark-glass {% if current_slide and current_slide.shocking_fact %}shocking{% endif %}" id="slide-card">
-            {% if current_slide %}
             <div id="slide-content">
-                {% if current_slide.title %}
-                <h2 class="p-slide-title {% if current_slide.shocking_fact %}shocking-text{% endif %}">{{ current_slide.title }}</h2>
+                {% if current_slide %}
+                    {% if current_slide.title %}
+                    <h2 class="p-slide-title {% if current_slide.shocking_fact %}shocking-text{% endif %}" id="slide-title">{{ current_slide.title }}</h2>
+                    {% endif %}
+                    {% if current_slide.image %}
+                    <img src="{{ current_slide.image.url }}" alt="{{ current_slide.title }}" class="p-slide-image" id="slide-image">
+                    {% endif %}
+                    <div class="p-slide-body" id="slide-body">{{ current_slide.content|linebreaksbr }}</div>
+                {% else %}
+                    <div class="p-slide-empty" id="slide-empty">
+                        <div class="empty-icon">🌿</div>
+                        <h2>Waiting to start...</h2>
+                        <p>The facilitator will begin shortly</p>
+                    </div>
                 {% endif %}
-                {% if current_slide.image %}
-                <img src="{{ current_slide.image.url }}" alt="{{ current_slide.title }}" class="p-slide-image">
-                {% endif %}
-                <div class="p-slide-body">{{ current_slide.content|linebreaksbr }}</div>
             </div>
 
-            {% if current_slide.slide_type == 'activity' and session.activity_active %}
-            <div class="activity-panel" id="activity-panel">
+            <div class="activity-panel" id="activity-panel" style="display:{% if current_slide and current_slide.slide_type == 'activity' and session.activity_active %}block{% else %}none{% endif %}">
                 <h3 class="activity-title" id="activity-title"></h3>
                 <div id="activity-content"></div>
+                <div class="submitted-indicator" id="submitted-indicator" style="display:none;">
+                    <div class="submitted-banner">✅ Submitted!</div>
+                </div>
+                <div class="answers-reveal" id="answers-reveal" style="display:none;"></div>
             </div>
-            {% endif %}
-
-            {% else %}
-            <div class="p-slide-empty">
-                <div class="empty-icon">🌿</div>
-                <h2>Waiting to start...</h2>
-                <p>The facilitator will begin shortly</p>
-            </div>
-            {% endif %}
         </div>
     </div>
 
@@ -106,11 +107,12 @@
     const PARTICIPANT_ID = {{ participant.id }};
     const CSRF_TOKEN = '{{ csrf_token }}';
     const CURRENT_SLIDE_ID = {% if current_slide %}{{ current_slide.id }}{% else %}0{% endif %};
-    const CURRENT_INDEX = {{ current_index }};
-    const CURRENT_SLIDE_TYPE = '{{ current_slide.slide_type|default_if_none:"" }}';
-    const CURRENT_ACTIVITY_TYPE = '{{ current_slide.activity_type|default_if_none:"" }}';
-    const ACTIVITY_ACTIVE = {{ session.activity_active|lower }};
-    const ACTIVITY_CONFIG = {% if current_slide and current_slide.activity_config %}{{ current_slide.activity_config|safe }}{% else %}null{% endif %};
+    let CURRENT_INDEX = {{ current_index }};
+    const TOTAL_SLIDES = {{ slides|length }};
+    let CURRENT_SLIDE_TYPE = '{{ current_slide.slide_type|default_if_none:"" }}';
+    let CURRENT_ACTIVITY_TYPE = '{{ current_slide.activity_type|default_if_none:"" }}';
+    let ACTIVITY_ACTIVE = {{ session.activity_active|lower }};
+    let ACTIVITY_CONFIG = {% if current_slide and current_slide.activity_config %}{{ current_slide.activity_config|safe }}{% else %}null{% endif %};
 
     const ACTIVITIES = {
         sprint: {
@@ -177,12 +179,13 @@
 
     let activitySubmitted = false;
     let eventSource = null;
+    let myAnswers = {};
 
     // floating background particles
     (function(){
         const c = document.getElementById('bg-particles');
         if (!c) return;
-        const emojis = ['🌿','🍃','🌱','🍀','💚','🌾','🌸','💧','🌍','🦋'];
+        const emojis = ['🌿','','🌱','','💚','','🌸','','🌍',''];
         for (let i = 0; i < 30; i++) {
             const s = document.createElement('span');
             s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
@@ -200,13 +203,12 @@
         eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
         eventSource.addEventListener('slide_change', function(e) {
             const data = JSON.parse(e.data);
-            if (data.slide_index !== undefined && data.slide_index != CURRENT_INDEX) {
-                location.reload();
-            }
+            updateSlideDisplay(data);
         });
         eventSource.addEventListener('activity_toggle', function(e) {
             const data = JSON.parse(e.data);
-            location.reload();
+            ACTIVITY_ACTIVE = data.activity_active;
+            toggleActivityPanel();
         });
         eventSource.addEventListener('session_status', function(e) {
             const data = JSON.parse(e.data);
@@ -214,9 +216,73 @@
                 window.location.href = '/session/';
             }
         });
+        eventSource.addEventListener('show_answers', function(e) {
+            const data = JSON.parse(e.data);
+            showCorrectAnswers(data);
+        });
         eventSource.onerror = function() {
             setTimeout(connectSSE, 3000);
         };
+    }
+
+    function updateSlideDisplay(data) {
+        if (data.slide_index === CURRENT_INDEX) return;
+        CURRENT_INDEX = data.slide_index;
+
+        // Update progress dots
+        const dots = document.querySelectorAll('#progress-bar .p-progress-dot');
+        dots.forEach((dot, i) => {
+            dot.classList.remove('active', 'done');
+            if (i === CURRENT_INDEX) dot.classList.add('active');
+            else if (i < CURRENT_INDEX) dot.classList.add('done');
+        });
+
+        const slide = data.slide;
+        const card = document.getElementById('slide-card');
+
+        if (!slide) {
+            card.innerHTML = '<div class="p-slide-empty"><div class="empty-icon">🌿</div><h2>Waiting to start...</h2><p>The facilitator will begin shortly</p></div>';
+            return;
+        }
+
+        CURRENT_SLIDE_TYPE = slide.slide_type;
+        CURRENT_ACTIVITY_TYPE = slide.activity_type || '';
+        ACTIVITY_CONFIG = slide.activity_config;
+        activitySubmitted = false;
+        myAnswers = {};
+        document.getElementById('submitted-indicator').style.display = 'none';
+        document.getElementById('answers-reveal').style.display = 'none';
+
+        // Update shocking class
+        if (slide.shocking_fact) card.classList.add('shocking');
+        else card.classList.remove('shocking');
+
+        // Build content
+        let html = '';
+        if (slide.title) {
+            html += '<h2 class="p-slide-title' + (slide.shocking_fact ? ' shocking-text' : '') + '">' + slide.title + '</h2>';
+        }
+        if (slide.image_url) {
+            html += '<img src="' + slide.image_url + '" alt="" class="p-slide-image">';
+        }
+        html += '<div class="p-slide-body">' + (slide.content || '').replace(/\n/g, '<br>') + '</div>';
+
+        document.getElementById('slide-content').innerHTML = html;
+
+        // Activity panel visibility
+        toggleActivityPanel();
+    }
+
+    function toggleActivityPanel() {
+        const panel = document.getElementById('activity-panel');
+        if (!panel) return;
+
+        const shouldShow = ACTIVITY_ACTIVE && CURRENT_SLIDE_TYPE === 'activity' && CURRENT_ACTIVITY_TYPE;
+        panel.style.display = shouldShow ? 'block' : 'none';
+
+        if (shouldShow && !activitySubmitted) {
+            renderActivity(CURRENT_ACTIVITY_TYPE, ACTIVITY_CONFIG);
+        }
     }
 
     // Render activity based on template type
@@ -252,29 +318,49 @@
             itemsHTML += '<div class="sort-game-item" draggable="true" data-item="' + i + '" data-correct="' + item.bin + '">' + item.emoji + ' ' + item.name + '</div>';
         });
         itemsHTML += '</div>';
-        contentEl.innerHTML = itemsHTML + binsHTML + '<button class="btn btn-primary btn-large btn-full" onclick="submitSprint()">♻️ Submit Sorting</button>';
+        contentEl.innerHTML = itemsHTML + binsHTML + '<button class="btn btn-primary btn-large btn-full" id="sprint-submit" onclick="submitSprint()">♻️ Submit Sorting</button>';
         initSprintDrag();
     }
 
     let sprintAnswers = {};
     function initSprintDrag() {
         document.querySelectorAll('.sort-game-item').forEach(item => {
-        item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.item); item.style.opacity = '0.5'; });
-        item.addEventListener('dragend', e => { item.style.opacity = '1'; });
-    });
-    document.querySelectorAll('.bin-dropzone').forEach(zone => {
-        zone.addEventListener('dragover', e => { e.preventDefault(); zone.closest('.sort-game-bin').classList.add('bin-over'); });
-        zone.addEventListener('dragleave', e => { zone.closest('.sort-game-bin').classList.remove('bin-over'); });
-        zone.addEventListener('drop', e => {
-            e.preventDefault(); zone.closest('.sort-game-bin').classList.remove('bin-over');
-            const idx = e.dataTransfer.getData('text/plain');
-            const bin = zone.dataset.bin;
-            sprintAnswers[idx] = bin;
-            const dragItem = document.querySelector('[data-item="' + idx + '"]');
-            if (dragItem) { dragItem.style.display = 'none'; zone.appendChild(dragItem); dragItem.style.display = ''; dragItem.draggable = false; dragItem.style.opacity = '0.7'; }
+            item.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/plain', item.dataset.item);
+                item.style.opacity = '0.5';
+            });
+            item.addEventListener('dragend', e => {
+                item.style.opacity = '1';
+            });
         });
-    });
+        document.querySelectorAll('.bin-dropzone').forEach(zone => {
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.closest('.sort-game-bin').classList.add('bin-over'); });
+            zone.addEventListener('dragleave', e => { zone.closest('.sort-game-bin').classList.remove('bin-over'); });
+            zone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone.closest('.sort-game-bin').classList.remove('bin-over');
+                const idx = e.dataTransfer.getData('text/plain');
+                const bin = zone.dataset.bin;
+                sprintAnswers[idx] = bin;
+
+                const dragItem = document.querySelector('[data-item="' + idx + '"]');
+                if (dragItem) {
+                    // Remove from old location
+                    dragItem.remove();
+                    // Add to new bin
+                    zone.appendChild(dragItem);
+                    dragItem.style.opacity = '0.9';
+                    dragItem.style.cursor = 'grab';
+                }
+            });
+        });
+        // Make bins themselves drop targets for re-dragging
+        document.querySelectorAll('.sort-game-bin').forEach(bin => {
+            bin.addEventListener('dragover', e => { e.preventDefault(); bin.classList.add('bin-over'); });
+            bin.addEventListener('dragleave', e => { bin.classList.remove('bin-over'); });
+        });
     }
+
     function submitSprint() {
         if (activitySubmitted) return;
         const data = ACTIVITIES.sprint;
@@ -285,6 +371,7 @@
         const isCorrect = correct === total;
         showResult(isCorrect, correct + '/' + total, isCorrect ? 10 : (correct > 0 ? 5 : 0));
         submitActivity('sprint', { answer: JSON.stringify(sprintAnswers), is_correct: isCorrect });
+        myAnswers = sprintAnswers;
     }
 
     function renderDecompose(titleEl, contentEl) {
@@ -300,30 +387,46 @@
             timelineHTML += '<div class="decompose-slot" data-slot="' + i + '"><h5>' + t + '</h5><div class="slot-item" id="slot-content-' + i + '"></div></div>';
         });
         timelineHTML += '</div>';
-        contentEl.innerHTML = itemsHTML + timelineHTML + '<button class="btn btn-primary btn-large btn-full" onclick="submitDecompose()">⏳ Check Answers</button>';
+        contentEl.innerHTML = itemsHTML + timelineHTML + '<button class="btn btn-primary btn-large btn-full" id="decompose-submit" onclick="submitDecompose()">⏳ Check Answers</button>';
         initDecomposeDrag();
     }
 
     let decomposeAnswers = {};
     function initDecomposeDrag() {
         document.querySelectorAll('.decompose-item').forEach(item => {
-        item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', item.dataset.idx); item.style.opacity = '0.5'; });
-        item.addEventListener('dragend', e => { item.style.opacity = '1'; });
+            item.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/plain', item.dataset.idx);
+                item.style.opacity = '0.5';
+            });
+            item.addEventListener('dragend', e => {
+                item.style.opacity = '1';
+            });
         });
         document.querySelectorAll('.decompose-slot').forEach(slot => {
             slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('slot-over'); });
             slot.addEventListener('dragleave', e => { slot.classList.remove('slot-over'); });
             slot.addEventListener('drop', e => {
-                e.preventDefault(); slot.classList.remove('slot-over');
+                e.preventDefault();
+                slot.classList.remove('slot-over');
                 const idx = e.dataTransfer.getData('text/plain');
                 const slotIdx = slot.dataset.slot;
                 decomposeAnswers[idx] = slotIdx;
+
                 const dragItem = document.querySelector('[data-idx="' + idx + '"]');
-                const slotContent = document.getElementById('slot-content-' + slotIdx);
-                if (dragItem && slotContent) { slotContent.innerHTML = dragItem.innerHTML; dragItem.style.opacity = '0.3'; dragItem.draggable = false; }
+                if (dragItem) {
+                    dragItem.remove();
+                    const slotContent = document.getElementById('slot-content-' + slotIdx);
+                    if (slotContent) {
+                        slotContent.innerHTML = '';
+                        slotContent.appendChild(dragItem);
+                        dragItem.style.opacity = '0.9';
+                        dragItem.style.cursor = 'grab';
+                    }
+                }
             });
         });
     }
+
     function submitDecompose() {
         if (activitySubmitted) return;
         const data = ACTIVITIES.decompose;
@@ -334,18 +437,18 @@
         const isCorrect = correct === data.items.length;
         showResult(isCorrect, correct + '/' + data.items.length, isCorrect ? 10 : (correct > 0 ? 5 : 0));
         submitActivity('decompose', { answer: JSON.stringify(decomposeAnswers), is_correct: isCorrect });
+        myAnswers = decomposeAnswers;
     }
 
     let quizState = { current: 0, score: 0, answers: [] };
     function renderQuiz(titleEl, contentEl, config) {
         const data = ACTIVITIES.quiz;
-        // check if config has custom questions (for backward compat)
         const questions = (config && config.questions) ? config.questions : data.questions;
         quizState = { current: 0, score: 0, answers: [], total: questions.length };
         titleEl.textContent = data.title;
-        showQuizQuestion(titleEl, contentEl, questions);
+        showQuizQuestion(contentEl, questions);
     }
-    function showQuizQuestion(titleEl, contentEl, questions) {
+    function showQuizQuestion(contentEl, questions) {
         const q = questions[quizState.current];
         const letters = ['A', 'B', 'C', 'D'];
         let progHTML = '<div class="quiz-progress">';
@@ -360,29 +463,36 @@
         qHTML += '<div class="activity-title">' + q.q + '</div>';
         qHTML += '<div class="quiz-options">';
         q.options.forEach((opt, i) => {
-            qHTML += '<button class="quiz-option" onclick="answerQuiz(' + i + ',' + q.correct + ')"><span class="quiz-letter">' + letters[i] + '</span> ' + opt + '</button>';
+            qHTML += '<button class="quiz-option" data-opt="' + i + '" onclick="answerQuiz(' + i + ',' + q.correct + ')"><span class="quiz-letter">' + letters[i] + '</span> ' + opt + '</button>';
         });
         qHTML += '</div>';
         contentEl.innerHTML = progHTML + qHTML;
     }
     function answerQuiz(chosen, correct) {
-        if (activitySubmitted) return;
         const config = ACTIVITY_CONFIG || {};
         const questions = (config && config.questions) ? config.questions : ACTIVITIES.quiz.questions;
         const isCorrect = chosen === correct;
-        if (isCorrect) { quizState.score += 10; }
+        if (isCorrect) quizState.score += 10;
         quizState.answers.push(chosen);
+        myAnswers['q' + quizState.current] = chosen;
+
         const btns = document.querySelectorAll('.quiz-option');
-        btns.forEach((btn, i) => { btn.disabled = true; btn.style.opacity = '0.6'; if (i === correct) { btn.style.borderColor = '#52B788'; btn.style.background = 'rgba(82,183,136,0.3)'; } if (i === chosen && !isCorrect) { btn.style.borderColor = '#E76F51'; btn.style.background = 'rgba(231,111,81,0.3)'; } });
+        btns.forEach((btn, i) => {
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+            if (i === correct) { btn.style.borderColor = '#52B788'; btn.style.background = 'rgba(82,183,136,0.3)'; }
+            if (i === chosen && !isCorrect) { btn.style.borderColor = '#E76F51'; btn.style.background = 'rgba(231,111,81,0.3)'; }
+        });
+
         setTimeout(() => {
             quizState.current++;
             if (quizState.current < questions.length) {
-                showQuizQuestion(document.getElementById('activity-title'), document.getElementById('activity-content'), questions);
+                showQuizQuestion(document.getElementById('activity-content'), questions);
             } else {
                 const pct = Math.round((quizState.score / (questions.length * 10)) * 100);
-                const isCorrect = pct >= 60;
-                showResult(isCorrect, quizState.score + ' pts (' + pct + '%)', quizState.score);
-                submitActivity('quiz', { answer: JSON.stringify(quizState.answers), is_correct: isCorrect });
+                const finalCorrect = pct >= 60;
+                showResult(finalCorrect, quizState.score + ' pts (' + pct + '%)', quizState.score);
+                submitActivity('quiz', { answer: JSON.stringify(quizState.answers), is_correct: finalCorrect });
             }
         }, 800);
     }
@@ -390,7 +500,7 @@
     function renderCommitment(titleEl, contentEl) {
         const data = ACTIVITIES.commitment;
         titleEl.textContent = data.title;
-        contentEl.innerHTML = '<div class="commit-wall" id="commit-wall-player"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-fancy" placeholder="' + data.placeholder + '" maxlength="280"></textarea><button class="btn btn-accent" onclick="submitCommitment()">💚 Commit</button></div>';
+        contentEl.innerHTML = '<div class="commit-wall" id="commit-wall-player"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-fancy" placeholder="' + data.placeholder + '" maxlength="280"></textarea><button class="btn btn-accent" id="commit-btn" onclick="submitCommitment()">💚 Commit</button></div>';
         loadPosts();
         setInterval(loadPosts, 3000);
     }
@@ -409,14 +519,15 @@
         submitActivity('commitment', { answer: content, is_correct: true });
     }
 
-    let statsState = { current: 0, score: 0 };
+    let statsState = { current: 0, score: 0, answers: [] };
     function renderSortStats(titleEl, contentEl, config) {
         const data = ACTIVITIES.sort_stats;
         const statements = (config && config.statements) ? config.statements : data.statements;
-        statsState = { current: 0, score: 0, total: statements.length };
-        showStatQuestion(titleEl, contentEl, statements);
+        statsState = { current: 0, score: 0, total: statements.length, answers: [] };
+        titleEl.textContent = data.title;
+        showStatQuestion(contentEl, statements);
     }
-    function showStatQuestion(titleEl, contentEl, statements) {
+    function showStatQuestion(contentEl, statements) {
         const s = statements[statsState.current];
         let progHTML = '<div class="quiz-progress">';
         statements.forEach((_, i) => {
@@ -432,21 +543,36 @@
         contentEl.innerHTML = progHTML + qHTML;
     }
     function answerStat(answer) {
-        if (activitySubmitted && statsState.current > 0) return;
         const config = ACTIVITY_CONFIG || {};
         const statements = (config && config.statements) ? config.statements : ACTIVITIES.sort_stats.statements;
         const s = statements[statsState.current];
         const isCorrect = answer === s.answer;
         if (isCorrect) statsState.score += 10;
+        statsState.answers.push(answer);
+        myAnswers['q' + statsState.current] = answer;
+
         if (!isCorrect && s.fact) {
             const el = document.createElement('div');
             el.style.cssText = 'margin-top:8px;padding:8px;background:rgba(231,111,81,0.2);border-radius:8px;color:#FFD4D4;font-size:14px;text-align:center;';
-            el.textContent = '💡 ' + s.fact; document.getElementById('activity-content').appendChild(el);
+            el.textContent = '💡 ' + s.fact;
+            document.getElementById('activity-content').appendChild(el);
         }
+
+        // Highlight buttons
+        const btns = document.querySelectorAll('.tf-btn');
+        btns.forEach(btn => { btn.disabled = true; btn.style.opacity = '0.5'; });
+        if (s.answer) {
+            document.querySelector('.tf-btn-true').style.borderColor = '#52B788';
+            document.querySelector('.tf-btn-true').style.background = 'rgba(82,183,136,0.3)';
+        } else {
+            document.querySelector('.tf-btn-false').style.borderColor = '#52B788';
+            document.querySelector('.tf-btn-false').style.background = 'rgba(82,183,136,0.3)';
+        }
+
         setTimeout(() => {
             statsState.current++;
             if (statsState.current < statements.length) {
-                showStatQuestion(document.getElementById('activity-title'), document.getElementById('activity-content'), statements);
+                showStatQuestion(document.getElementById('activity-content'), statements);
             } else {
                 const pct = Math.round((statsState.score / (statements.length * 10)) * 100);
                 const finalCorrect = pct >= 60;
@@ -479,11 +605,12 @@
         if (activitySubmitted) return;
         submitActivity('poll', { answer: idx, is_correct: null });
         activitySubmitted = true;
+        showSubmittedIndicator();
         document.getElementById('activity-panel').classList.add('activity-submitted');
     }
     function renderLegacyDiscuss(config, titleEl, contentEl) {
         titleEl.textContent = config.prompt || 'Share your thoughts';
-        contentEl.innerHTML = '<div class="discuss-wall-player commit-wall" id="discuss-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="discuss-input-p" placeholder="Share your thoughts..." maxlength="' + (config.max_chars || 280) + '"></textarea><button class="btn btn-primary" onclick="submitLegacyDiscuss()">Post</button></div>';
+        contentEl.innerHTML = '<div class="discuss-wall-player commit-wall" id="discuss-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="discuss-input-p" placeholder="Share your thoughts..." maxlength="' + (config.max_chars || 280) + '"></textarea><button class="btn btn-primary" id="discuss-btn" onclick="submitLegacyDiscuss()">Post</button></div>';
         loadPosts(); setInterval(loadPosts, 3000);
     }
     function submitLegacyDiscuss() {
@@ -499,7 +626,7 @@
     }
     function renderLegacyCommit(config, titleEl, contentEl) {
         titleEl.textContent = config.prompt || 'I will...';
-        contentEl.innerHTML = '<div class="commit-wall commit-wall-player" id="commit-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-p" placeholder="I will..." maxlength="280"></textarea><button class="btn btn-accent" onclick="submitLegacyCommit()">💚 Commit</button></div>';
+        contentEl.innerHTML = '<div class="commit-wall commit-wall-player" id="commit-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-p" placeholder="I will..." maxlength="280"></textarea><button class="btn btn-accent" id="commit-legacy-btn" onclick="submitLegacyCommit()">💚 Commit</button></div>';
         loadPosts(); setInterval(loadPosts, 3000);
     }
     function submitLegacyCommit() {
@@ -513,24 +640,24 @@
         }).then(r => r.json()).then(data => { if (data.success) { showResult(true, '💚 Committed!', 5); loadPosts(); } });
         submitActivity('commit', { answer: content, is_correct: true });
     }
-    function renderLegacyGuess(config, titleEl, contentEl) {
-        titleEl.textContent = config.question || 'How long does it take?';
-        if (config.item) { contentEl.innerHTML += '<div class="guess-item">' + config.item + '</div>'; }
-        let html = '<div class="guess-options">';
-        (config.options || []).forEach(opt => { html += '<button class="guess-option" onclick="submitLegacyGuess(\'' + opt.replace(/'/g, "\\'") + '\',\'' + config.correct.replace(/'/g, "\\'") + '\')">' + opt + '</button>'; });
-        html += '</div>';
-        contentEl.innerHTML += html;
-    }
-    function submitLegacyGuess(value, correct) {
-        if (activitySubmitted) return;
-        const isCorrect = value === correct;
-        showResult(isCorrect, isCorrect ? 'Correct!' : 'The answer was: ' + correct, isCorrect ? 10 : 0);
-        submitActivity('guess', { answer: value, is_correct: isCorrect });
-    }
 
     function submitActivity(type, payload) {
         if (activitySubmitted) return;
         activitySubmitted = true;
+        showSubmittedIndicator();
+
+        // Disable all interactive elements
+        document.querySelectorAll('.quiz-option, .tf-btn, .poll-option, .sort-game-item, .decompose-item').forEach(el => {
+            el.disabled = true;
+            el.draggable = false;
+            el.style.pointerEvents = 'none';
+            el.style.opacity = '0.6';
+        });
+        ['sprint-submit','decompose-submit','commit-btn','discuss-btn','commit-legacy-btn'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) { btn.disabled = true; btn.textContent = '✅ Submitted'; btn.style.opacity = '0.6'; }
+        });
+
         fetch('/session/' + SESSION_CODE + '/submit/', {
             method: 'POST', headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json'},
             body: JSON.stringify({ slide_id: CURRENT_SLIDE_ID, activity_type: type, ...payload })
@@ -545,6 +672,11 @@
                 if (data.badges && data.badges.length > 0) updateBadges(data.badges);
             }
         });
+    }
+
+    function showSubmittedIndicator() {
+        const indicator = document.getElementById('submitted-indicator');
+        if (indicator) indicator.style.display = 'block';
     }
 
     function showResult(isCorrect, text, points) {
@@ -594,6 +726,62 @@
         const notif = document.getElementById('badge-notification');
         notif.style.display = 'flex';
         setTimeout(() => notif.style.display = 'none', 3000);
+    }
+
+    function showCorrectAnswers(data) {
+        const revealEl = document.getElementById('answers-reveal');
+        if (!revealEl) return;
+        revealEl.style.display = 'block';
+
+        let html = '<h4 style="color:#52B788;margin-bottom:12px;">📋 Correct Answers</h4>';
+
+        if (CURRENT_ACTIVITY_TYPE === 'sprint' || CURRENT_ACTIVITY_TYPE === 'decompose') {
+            html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+            const activityData = ACTIVITIES[CURRENT_ACTIVITY_TYPE === 'sprint' ? 'sprint' : 'decompose'];
+            activityData.items.forEach((item, i) => {
+                const userAns = myAnswers[String(i)];
+                let correctLabel = '';
+                if (CURRENT_ACTIVITY_TYPE === 'sprint') {
+                    const bin = activityData.bins.find(b => b.id === item.bin);
+                    correctLabel = bin ? bin.name : item.bin;
+                } else {
+                    correctLabel = activityData.timeline[item.slot];
+                }
+                const isCorrect = userAns === (CURRENT_ACTIVITY_TYPE === 'sprint' ? item.bin : String(item.slot));
+                html += '<div style="padding:8px 12px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.2)' : 'rgba(231,111,81,0.2)') + ';border:1px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
+                html += '<span>' + item.emoji + ' ' + item.name + '</span>';
+                html += '<span style="float:right;font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + correctLabel + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        } else if (CURRENT_ACTIVITY_TYPE === 'quiz') {
+            html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+            const questions = ACTIVITIES.quiz.questions;
+            questions.forEach((q, i) => {
+                const userAns = myAnswers['q' + i];
+                const isCorrect = userAns === q.correct;
+                html += '<div style="padding:8px 12px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.2)' : 'rgba(231,111,81,0.2)') + ';border:1px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
+                html += '<div style="font-size:13px;margin-bottom:4px;">Q' + (i+1) + ': ' + q.q + '</div>';
+                html += '<div style="font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + 'Correct: ' + q.options[q.correct] + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        } else if (CURRENT_ACTIVITY_TYPE === 'sort_stats') {
+            html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+            const statements = ACTIVITIES.sort_stats.statements;
+            statements.forEach((s, i) => {
+                const userAns = myAnswers['q' + i];
+                const isCorrect = userAns === s.answer;
+                html += '<div style="padding:8px 12px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.2)' : 'rgba(231,111,81,0.2)') + ';border:1px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
+                html += '<div style="font-size:13px;margin-bottom:4px;">' + s.text + '</div>';
+                html += '<div style="font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + 'Correct: ' + (s.answer ? 'True' : 'False') + '</div>';
+                if (s.fact && !isCorrect) html += '<div style="font-size:12px;color:#FFD4D4;margin-top:4px;">💡 ' + s.fact + '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        revealEl.innerHTML = html;
     }
 
     connectSSE();

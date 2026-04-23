@@ -1,4 +1,5 @@
 import json
+import time
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -6,6 +7,7 @@ from django.views.decorators.http import require_POST, require_GET
 from django.views.decorators.cache import never_cache
 from django.contrib.admin.views.decorators import staff_member_required
 from django.conf import settings
+from django.core.cache import cache
 from .models import Session, Slide, Participant, Badge, ActivityResult, AnonymousPost
 
 
@@ -121,6 +123,8 @@ def participant_view(request, code):
 @never_cache
 def join_session(request, code):
     session = get_object_or_404(Session, code=code)
+    if session.status == 'ended':
+        return render(request, 'session/join_ended.html', {'session': session})
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         avatar = request.POST.get('avatar', '\U0001f331')
@@ -161,13 +165,14 @@ def sse_stream(request, code):
         last_activity = session.activity_active
         last_status = session.status
         last_result_count = ActivityResult.objects.filter(session=session).count()
-        import time
+        last_show_answers = cache.get(f'show_answers_{code}', 0)
         while True:
             session.refresh_from_db()
             current_index = session.current_slide_index
             activity_active = session.activity_active
             current_status = session.status
             current_result_count = ActivityResult.objects.filter(session=session).count()
+            current_show_answers = cache.get(f'show_answers_{code}', 0)
 
             slides = list(session.slides.filter(is_active=True).order_by('order'))
             total_slides = len(slides)
@@ -196,6 +201,11 @@ def sse_stream(request, code):
                 data = json.dumps({'result_count': current_result_count})
                 yield f"event: activity_result\ndata: {data}\n\n"
                 last_result_count = current_result_count
+
+            if current_show_answers != last_show_answers:
+                data = json.dumps({'timestamp': current_show_answers})
+                yield f"event: show_answers\ndata: {data}\n\n"
+                last_show_answers = current_show_answers
 
             time.sleep(1)
 
@@ -231,10 +241,26 @@ def facilitator_action(request, code, action):
         session.save()
     elif action == 'end_session':
         session.status = 'ended'
+        session.activity_active = False
         session.save()
     elif action == 'start_session':
         session.status = 'active'
         session.save()
+    elif action == 'restart_session':
+        session.status = 'active'
+        session.current_slide_index = 0
+        session.activity_active = False
+        session.save()
+        ActivityResult.objects.filter(session=session).delete()
+        AnonymousPost.objects.filter(session=session).delete()
+        for p in session.participants.all():
+            p.total_points = 0
+            p.streak = 0
+            p.max_streak = 0
+            p.badges.clear()
+            p.save()
+    elif action == 'show_answers':
+        cache.set(f'show_answers_{code}', time.time(), timeout=300)
 
     return JsonResponse({
         'success': True,

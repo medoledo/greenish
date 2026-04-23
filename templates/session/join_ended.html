@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Ended - Greenish</title>
+    <link rel="stylesheet" href="/static/css/session.css?v=8">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body class="join-page">
+    <div class="particle-layer" id="bg-particles"></div>
+    <div class="glass-card" style="text-align:center;">
+        <div style="font-size:64px;margin-bottom:16px;">🏁</div>
+        <h1 style="margin-bottom:8px;">Session Ended</h1>
+        <p style="color:rgba(255,255,255,0.8);margin-bottom:24px;">This session has concluded. Thank you for participating!</p>
+        <a href="/session/" class="btn btn-primary">🏠 Back to Home</a>
+    </div>
+    <script>
+        (function(){
+            const c = document.getElementById('bg-particles');
+            if (!c) return;
+            const emojis = ['🌿','','🌱','','💚','','🌸','','🌍',''];
+            for (let i = 0; i < 20; i++) {
+                const s = document.createElement('span');
+                s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                s.style.left = Math.random() * 100 + '%';
+                s.style.top = Math.random() * 100 + '%';
+                s.style.animationDelay = (Math.random() * 12) + 's';
+                s.style.animationDuration = (10 + Math.random() * 8) + 's';
+                s.style.fontSize = (24 + Math.random() * 16) + 'px';
+                c.appendChild(s);
+            }
+        })();
+    </script>
+</body>
+</html>

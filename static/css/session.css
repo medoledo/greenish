@@ -524,13 +524,13 @@ body {
     to { opacity: 1; transform: scale(1); }
 }
 .slide-content.shocking {
-    background: linear-gradient(135deg, #FEF2F2, #FFF5F5);
-    border: 3px solid var(--alert); border-radius: var(--radius-lg);
-    padding: 40px; animation: pulse-alert 2s ease-in-out infinite;
+    border: 3px solid var(--alert);
+    animation: pulse-alert 2s ease-in-out infinite;
 }
 .slide-display .slide-content.dark-glass.shocking {
-    background: linear-gradient(135deg, rgba(231,111,81,0.65), rgba(180,60,40,0.65)) !important;
+    background: linear-gradient(135deg, rgba(231,111,81,0.2), rgba(180,60,40,0.15)) !important;
     border-color: rgba(231,111,81,0.5);
+    box-shadow: 0 0 40px rgba(231,111,81,0.3), inset 0 0 40px rgba(231,111,81,0.05);
 }
 .dark-glass.shocking .slide-title {
     color: #FFD4D4 !important;
@@ -600,6 +600,29 @@ body {
 .lb-badges { font-size: 14px; }
 .qr-info { background: var(--bg); padding: 16px; border-radius: var(--radius); text-align: center; }
 .join-url { font-family: monospace; font-size: 16px; font-weight: 700; color: var(--primary); padding: 8px; background: var(--white); border-radius: 8px; margin-top: 8px; letter-spacing: 1px; }
+
+.submitted-indicator {
+    margin-top: 16px;
+    animation: actSlideUp 0.5s ease-out;
+}
+.submitted-banner {
+    padding: 12px 24px;
+    background: rgba(82, 183, 136, 0.25);
+    border: 2px solid #52B788;
+    border-radius: var(--radius);
+    color: #52B788;
+    font-weight: 800;
+    font-size: 16px;
+    text-align: center;
+}
+.answers-reveal {
+    margin-top: 16px;
+    padding: 16px;
+    background: rgba(10, 35, 25, 0.9);
+    border: 1px solid rgba(82, 183, 136, 0.3);
+    border-radius: var(--radius);
+    animation: actSlideUp 0.5s ease-out;
+}
 
 /* ==================== ACTIVITY OVERLAY ==================== */
 .activity-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 50; display: flex; align-items: center; justify-content: center; }
