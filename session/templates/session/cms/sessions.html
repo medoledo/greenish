@@ -4,26 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sessions - Greenish CMS</title>
-    <link rel="stylesheet" href="/static/css/session.css">
-    <link rel="stylesheet" href="/static/css/cms.css">
+    <link rel="stylesheet" href="/static/css/session.css?v=4">
+    <link rel="stylesheet" href="/static/css/cms.css?v=4">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="cms-page">
     <header class="cms-header">
         <div class="cms-header-left">
-            <img src="/static/img/logo.svg" alt="Greenish" class="cms-logo">
+            <img src="/static/img/logo.svg?v=4" alt="Greenish" class="cms-logo">
             <h1>Greenish CMS</h1>
         </div>
         <div class="cms-header-right">
-            <a href="/admin/" class="btn btn-outline">Django Admin</a>
             <a href="/session/" class="btn btn-secondary">← Back to App</a>
+            {% if owned_session %}
+            <a href="/session/{{ owned_session }}/facilitator/" class="btn btn-accent">▶ My Session</a>
+            {% endif %}
+            <a href="/session/create/" class="btn btn-primary">+ New Session</a>
+            <a href="{% url 'cms_logout' %}" class="btn btn-danger">Logout</a>
         </div>
     </header>
 
     <main class="cms-main">
         <div class="cms-section-header">
             <h2>Sessions</h2>
-            <a href="/session/create/" class="btn btn-primary">+ New Session</a>
         </div>
 
         {% if sessions %}
@@ -43,8 +46,12 @@
                 </p>
                 <div class="session-card-actions">
                     <a href="{% url 'cms_slides' code=session.code %}" class="btn btn-primary btn-small">Manage Slides</a>
-                    <a href="{% url 'cms_export' code=session.code %}" class="btn btn-outline btn-small">JSON Export</a>
-                    <a href="{% url 'cms_export_csv' code=session.code %}" class="btn btn-outline btn-small">CSV Export</a>
+                    <a href="{% url 'cms_export' code=session.code %}" class="btn btn-outline btn-small">JSON</a>
+                    <a href="{% url 'cms_export_csv' code=session.code %}" class="btn btn-outline btn-small">CSV</a>
+                    <form method="post" action="{% url 'cms_delete_session' code=session.code %}" style="display:inline;" onsubmit="return confirm('Delete session {{ session.code }}? This cannot be undone.');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                    </form>
                 </div>
             </div>
             {% endfor %}

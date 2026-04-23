@@ -3,60 +3,79 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.cache import never_cache
+from django.contrib.admin.views.decorators import staff_member_required
 from django.conf import settings
 from .models import Session, Slide, Participant, Badge, ActivityResult, AnonymousPost
 
 
+@never_cache
 def home(request):
-    return render(request, 'session/home.html')
+    owned_session = request.session.get('owned_session')
+    if owned_session:
+        try:
+            Session.objects.get(code=owned_session)
+        except Session.DoesNotExist:
+            del request.session['owned_session']
+            owned_session = None
+    return render(request, 'session/home.html', {'owned_session': owned_session})
 
 
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
 def create_session(request):
+    owned_session_code = request.session.get('owned_session')
+    if owned_session_code:
+        try:
+            Session.objects.get(code=owned_session_code)
+            return redirect('cms_slides', code=owned_session_code)
+        except Session.DoesNotExist:
+            del request.session['owned_session']
+
     if request.method == 'POST':
         title = request.POST.get('title', 'Greenish Session')
-        facilitator_name = request.POST.get('facilitator_name', '')
-        facilitator_password = request.POST.get('facilitator_password', '')
+        facilitator_name = request.user.get_full_name() or request.user.username
         session = Session.objects.create(
             title=title,
             facilitator_name=facilitator_name,
-            facilitator_password=facilitator_password,
+            facilitator_password='facilitator',
         )
-        return redirect('session_facilitator', code=session.code)
+        request.session[f'facilitator_{session.code}'] = session.id
+        request.session['owned_session'] = session.code
+        return redirect('cms_slides', code=session.code)
     return render(request, 'session/create.html')
 
 
-def join_session(request, code):
+@never_cache
+def facilitator_login(request, code):
     session = get_object_or_404(Session, code=code)
     if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
-        avatar = request.POST.get('avatar', '🌱')
-        if not name:
-            return render(request, 'session/join.html', {'session': session, 'error': 'Please enter your name', 'avatar_choices': settings.AVATAR_CHOICES})
-        participant, created = Participant.objects.get_or_create(
-            session=session,
-            name=name,
-            defaults={'avatar': avatar}
-        )
-        if not created:
-            participant.avatar = avatar
-            participant.save()
-        request.session['participant_id'] = participant.id
-        request.session['session_code'] = code
-        return redirect('session_participant', code=session.code)
-    return render(request, 'session/join.html', {'session': session, 'avatar_choices': settings.AVATAR_CHOICES})
+        password = request.POST.get('facilitator_password', '')
+        if password == session.facilitator_password:
+            request.session[f'facilitator_{code}'] = session.id
+            request.session['owned_session'] = code
+            return redirect('session_facilitator', code=code)
+        return render(request, 'session/facilitator_login.html', {'session': session, 'error': 'Incorrect password'})
+    return render(request, 'session/facilitator_login.html', {'session': session})
 
 
+def facilitator_logout(request, code):
+    if f'facilitator_{code}' in request.session:
+        del request.session[f'facilitator_{code}']
+    if 'owned_session' in request.session:
+        del request.session['owned_session']
+    return redirect('session_home')
+
+
+@never_cache
 def facilitator_view(request, code):
     session = get_object_or_404(Session, code=code)
-    if request.session.get(f'facilitator_{code}') != str(session.id):
-        if request.method == 'POST':
-            password = request.POST.get('facilitator_password', '')
-            if password == session.facilitator_password:
-                request.session[f'facilitator_{code}'] = session.id
-            else:
-                return render(request, 'session/facilitator_login.html', {'session': session, 'error': 'Incorrect password'})
+    if request.session.get(f'facilitator_{code}') != session.id:
+        if request.user.is_authenticated and request.user.is_staff:
+            request.session[f'facilitator_{code}'] = session.id
+            request.session['owned_session'] = code
         else:
-            return render(request, 'session/facilitator_login.html', {'session': session})
+            return redirect('session_facilitator_login', code=code)
     slides = list(session.slides.filter(is_active=True).order_by('order'))
     participants = session.participants.all().order_by('-total_points')
     total_slides = len(slides)
@@ -73,6 +92,7 @@ def facilitator_view(request, code):
     return render(request, 'session/facilitator.html', context)
 
 
+@never_cache
 def participant_view(request, code):
     session = get_object_or_404(Session, code=code)
     participant_id = request.session.get('participant_id')
@@ -96,6 +116,28 @@ def participant_view(request, code):
         'participant': participant,
     }
     return render(request, 'session/participant.html', context)
+
+
+@never_cache
+def join_session(request, code):
+    session = get_object_or_404(Session, code=code)
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        avatar = request.POST.get('avatar', '\U0001f331')
+        if not name:
+            return render(request, 'session/join.html', {'session': session, 'error': 'Please enter your name', 'avatar_choices': settings.AVATAR_CHOICES})
+        participant, created = Participant.objects.get_or_create(
+            session=session,
+            name=name,
+            defaults={'avatar': avatar}
+        )
+        if not created:
+            participant.avatar = avatar
+            participant.save()
+        request.session['participant_id'] = participant.id
+        request.session['session_code'] = code
+        return redirect('session_participant', code=session.code)
+    return render(request, 'session/join.html', {'session': session, 'avatar_choices': settings.AVATAR_CHOICES})
 
 
 def sse_stream(request, code):
@@ -259,11 +301,12 @@ def submit_post(request, code):
         'success': True,
         'post_id': post.id,
         'content': post.content,
-        'avatar': participant.avatar if participant else '🌱',
+        'avatar': participant.avatar if participant else '\U0001f331',
     })
 
 
 @require_GET
+@never_cache
 def get_posts(request, code):
     session = get_object_or_404(Session, code=code)
     slide_id = request.GET.get('slide_id')
@@ -273,7 +316,7 @@ def get_posts(request, code):
     posts_list = [{
         'id': p.id,
         'content': p.content,
-        'avatar': p.participant.avatar if p.participant else '🌱',
+        'avatar': p.participant.avatar if p.participant else '\U0001f331',
         'name': p.participant.name if p.participant else 'Anonymous',
         'created_at': p.created_at.strftime('%H:%M'),
     } for p in posts.order_by('-created_at')[:50]]
@@ -281,6 +324,7 @@ def get_posts(request, code):
 
 
 @require_GET
+@never_cache
 def get_leaderboard(request, code):
     session = get_object_or_404(Session, code=code)
     participants = session.participants.all().order_by('-total_points')[:20]
@@ -295,6 +339,7 @@ def get_leaderboard(request, code):
 
 
 @require_GET
+@never_cache
 def get_slide_data(request, code, slide_id):
     session = get_object_or_404(Session, code=code)
     slide = get_object_or_404(Slide, id=slide_id, session=session)
@@ -312,6 +357,7 @@ def get_slide_data(request, code, slide_id):
 
 
 @require_GET
+@never_cache
 def get_session_state(request, code):
     session = get_object_or_404(Session, code=code)
     slides = list(session.slides.filter(is_active=True).order_by('order'))
@@ -349,7 +395,7 @@ def check_and_award_badges(participant):
             name='First Bloom',
             trigger_type='count',
             trigger_value=1,
-            defaults={'description': 'First correct answer', 'icon': '🌱'}
+            defaults={'description': 'First correct answer', 'icon': '\U0001f331'}
         )
         badges_to_award.append(badge)
     if participant.max_streak >= 3 or participant.streak >= 3:
@@ -357,7 +403,7 @@ def check_and_award_badges(participant):
             name='On Fire',
             trigger_type='streak',
             trigger_value=3,
-            defaults={'description': '3 correct answers in a row', 'icon': '🔥'}
+            defaults={'description': '3 correct answers in a row', 'icon': '\U0001f525'}
         )
         badges_to_award.append(badge)
     if correct_results >= 5:
@@ -365,7 +411,7 @@ def check_and_award_badges(participant):
             name='Sorting Pro',
             trigger_type='count',
             trigger_value=5,
-            defaults={'description': '5 correct answers', 'icon': '♻️'}
+            defaults={'description': '5 correct answers', 'icon': '\U0000267b\ufe0f'}
         )
         badges_to_award.append(badge)
     if discuss_count >= 1:
@@ -373,7 +419,7 @@ def check_and_award_badges(participant):
             name='Wave Maker',
             trigger_type='activity',
             trigger_value=1,
-            defaults={'description': 'Participated in discussion', 'icon': '🌊'}
+            defaults={'description': 'Participated in discussion', 'icon': '\U0001f30a'}
         )
         badges_to_award.append(badge)
     if commit_count >= 1:
@@ -381,7 +427,7 @@ def check_and_award_badges(participant):
             name='Commitment Keeper',
             trigger_type='activity',
             trigger_value=1,
-            defaults={'description': 'Made a commitment', 'icon': '💪'}
+            defaults={'description': 'Made a commitment', 'icon': '\U0001f4aa'}
         )
         badges_to_award.append(badge)
     for badge in badges_to_award:

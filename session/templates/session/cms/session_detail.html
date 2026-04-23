@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ session.title }} - Greenish CMS</title>
-    <link rel="stylesheet" href="/static/css/session.css">
-    <link rel="stylesheet" href="/static/css/cms.css">
+    <link rel="stylesheet" href="/static/css/session.css?v=4">
+    <link rel="stylesheet" href="/static/css/cms.css?v=4">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="cms-page">
     <header class="cms-header">
         <div class="cms-header-left">
-            <img src="/static/img/logo.svg" alt="Greenish" class="cms-logo">
+            <img src="/static/img/logo.svg?v=4" alt="Greenish" class="cms-logo">
             <h1>{{ session.title }}</h1>
         </div>
         <div class="cms-header-right">
@@ -40,9 +40,14 @@
 
             <div class="session-card-actions" style="margin-top:16px;">
                 <a href="{% url 'session_facilitator' code=session.code %}" class="btn btn-primary btn-small">Facilitator View</a>
-                <a href="{% url 'session_participant' code=session.code %}" class="btn btn-secondary btn-small">Participant View</a>
                 <a href="{% url 'cms_export' code=session.code %}" class="btn btn-outline btn-small">JSON Export</a>
                 <a href="{% url 'cms_export_csv' code=session.code %}" class="btn btn-outline btn-small">CSV Export</a>
+            </div>
+            <div style="margin-top:24px; padding-top:16px; border-top:1px solid var(--primary-pale);">
+                <form method="post" action="{% url 'cms_delete_session' code=session.code %}" onsubmit="return confirm('Are you sure you want to delete this session? This cannot be undone.');" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-small">Delete Session</button>
+                </form>
             </div>
         </div>
     </main>

@@ -1,30 +1,64 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.contrib.admin.views.decorators import staff_member_required
 from django.views.decorators.http import require_POST
+from django.views.decorators.cache import never_cache
 from .models import Session, Slide
 
 
-@staff_member_required
+@never_cache
+def cms_login(request):
+    if request.user.is_authenticated and request.user.is_staff:
+        return redirect('cms_sessions')
+    if request.method == 'POST':
+        username = request.POST.get('username', '')
+        password = request.POST.get('password', '')
+        user = authenticate(request, username=username, password=password)
+        if user is not None and user.is_staff:
+            auth_login(request, user)
+            next_url = request.GET.get('next', '/session/cms/')
+            return redirect(next_url)
+        return render(request, 'session/cms_login.html', {'error': 'Invalid username or password'})
+    return render(request, 'session/cms_login.html')
+
+
+@never_cache
+def cms_logout(request):
+    auth_logout(request)
+    return redirect('cms_login')
+
+
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
 def cms_sessions(request):
     sessions = Session.objects.all().order_by('-created_at')
-    return render(request, 'session/cms/sessions.html', {'sessions': sessions})
+    owned_code = request.session.get('owned_session')
+    if owned_code:
+        try:
+            Session.objects.get(code=owned_code)
+        except Session.DoesNotExist:
+            owned_code = None
+    return render(request, 'session/cms/sessions.html', {'sessions': sessions, 'owned_session': owned_code})
 
 
-@staff_member_required
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
 def cms_session_detail(request, code):
     session = get_object_or_404(Session, code=code)
     return render(request, 'session/cms/session_detail.html', {'session': session})
 
 
-@staff_member_required
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
 def cms_slides(request, code):
     session = get_object_or_404(Session, code=code)
     slides = session.slides.all().order_by('order')
     return render(request, 'session/cms/slides.html', {'session': session, 'slides': slides})
 
 
-@staff_member_required
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
 def cms_slide_edit(request, code, slide_id=None):
     session = get_object_or_404(Session, code=code)
     slide = None
@@ -120,7 +154,7 @@ def cms_slide_edit(request, code, slide_id=None):
 
 
 @require_POST
-@staff_member_required
+@staff_member_required(login_url='/session/cms/login/')
 def cms_slide_reorder(request, code):
     session = get_object_or_404(Session, code=code)
     import json
@@ -131,7 +165,7 @@ def cms_slide_reorder(request, code):
     return JsonResponse({'success': True})
 
 
-@staff_member_required
+@staff_member_required(login_url='/session/cms/login/')
 def cms_slide_delete(request, code, slide_id):
     session = get_object_or_404(Session, code=code)
     slide = get_object_or_404(Slide, id=slide_id, session=session)
@@ -139,7 +173,8 @@ def cms_slide_delete(request, code, slide_id):
     return redirect('cms_slides', code=session.code)
 
 
-@staff_member_required
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
 def cms_export(request, code):
     session = get_object_or_404(Session, code=code)
     import json
@@ -200,7 +235,8 @@ def cms_export(request, code):
     return response
 
 
-@staff_member_required
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
 def cms_export_csv(request, code):
     import csv
     session = get_object_or_404(Session, code=code)
@@ -234,3 +270,15 @@ def cms_export_csv(request, code):
         ])
 
     return response
+
+
+@never_cache
+@staff_member_required(login_url='/session/cms/login/')
+def delete_session(request, code):
+    session = get_object_or_404(Session, code=code)
+    if request.method == 'POST':
+        if request.session.get('owned_session') == code:
+            del request.session['owned_session']
+        session.delete()
+        return redirect('cms_sessions')
+    return redirect('cms_session_detail', code=code)

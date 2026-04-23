@@ -19,8 +19,8 @@ class Session(models.Model):
     ]
     code = models.CharField(max_length=6, unique=True, default=generate_session_code)
     title = models.CharField(max_length=255)
-    facilitator_name = models.CharField(max_length=100)
-    facilitator_password = models.CharField(max_length=128)
+    facilitator_name = models.CharField(max_length=100, blank=True, default='')
+    facilitator_password = models.CharField(max_length=128, blank=True, default='')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='waiting')
     current_slide_index = models.PositiveIntegerField(default=0)
     activity_active = models.BooleanField(default=False)

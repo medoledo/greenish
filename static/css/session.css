@@ -121,8 +121,13 @@ body {
     flex: 1;
 }
 
-.btn-icon {
+".btn-icon {
     font-size: 20px;
+}
+
+.btn-small {
+    padding: 6px 14px;
+    font-size: 13px;
 }
 
 .form-input {
