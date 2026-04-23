@@ -373,14 +373,23 @@
                 case 'quiz': renderFacQuiz(titleEl, contentEl, config); break;
                 case 'commitment': renderFacCommitment(titleEl, contentEl); break;
                 case 'sort_stats': renderFacSortStats(titleEl, contentEl, config); break;
+                case 'discuss': renderFacDiscuss(titleEl, contentEl, config); break;
                 default: titleEl.textContent = type.charAt(0).toUpperCase() + type.slice(1); contentEl.innerHTML = '<p style="color:rgba(255,255,255,0.5)">Activity active</p>'; break;
             }
             refreshLiveStats();
         }
 
+        function renderFacDiscuss(titleEl, contentEl, config) {
+            const prompt = (config && config.prompt) ? config.prompt : 'Share your thoughts';
+            titleEl.textContent = '💬 ' + prompt;
+            contentEl.innerHTML = '<p style="color:rgba(255,255,255,0.6);font-style:italic;margin-bottom:12px;">💬 Live submissions will appear below</p>';
+            startPostsPoller();
+        }
+
         function hideFacilitatorActivity() {
             const panel = document.getElementById('fac-activity-panel');
             if (panel) panel.style.display = 'none';
+            stopPostsPoller();
         }
 
         function renderFacSprint(titleEl, contentEl) {
