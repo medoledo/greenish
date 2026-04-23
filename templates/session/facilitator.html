@@ -561,8 +561,8 @@
 
             questions.forEach((q, qi) => {
                 const letters = ['A', 'B', 'C', 'D'];
-                html += '<div class="quiz-question-block" style="margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;">';
-                html += '<div style="font-weight:700;margin-bottom:8px;">Q' + (qi+1) + ': ' + q.q + '</div>';
+                html += '<div class="quiz-question-block" style="margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.08);border-radius:8px;">';
+                html += '<div style="font-weight:700;margin-bottom:8px;color:#fff;">Q' + (qi+1) + ': ' + q.q + '</div>';
                 html += '<div class="quiz-options">';
                 q.options.forEach((opt, i) => {
                     html += '<button class="quiz-option" style="pointer-events:none;opacity:0.8"><span class="quiz-letter">' + letters[i] + '</span> ' + opt + '</button>';
@@ -596,8 +596,8 @@
             titleEl.textContent = data.title;
             let html = '';
             statements.forEach((s, i) => {
-                html += '<div style="margin-bottom:12px;padding:12px;background:rgba(255,255,255,0.05);border-radius:8px;">';
-                html += '<div style="font-weight:700;margin-bottom:8px;">' + (i+1) + '. ' + s.text + '</div>';
+                html += '<div style="margin-bottom:12px;padding:12px;background:rgba(255,255,255,0.08);border-radius:8px;">';
+                html += '<div style="font-weight:700;margin-bottom:8px;color:#fff;">' + (i+1) + '. ' + s.text + '</div>';
                 html += '<div class="tf-buttons"><button class="tf-btn tf-btn-true" style="pointer-events:none;opacity:0.8">✅ True</button><button class="tf-btn tf-btn-false" style="pointer-events:none;opacity:0.8">❌ False</button></div>';
                 html += '</div>';
             });

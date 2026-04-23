@@ -24,6 +24,7 @@ class Session(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='waiting')
     current_slide_index = models.PositiveIntegerField(default=0)
     activity_active = models.BooleanField(default=False)
+    show_answers_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

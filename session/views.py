@@ -169,7 +169,7 @@ def sse_stream(request, code):
         last_activity = session.activity_active
         last_status = session.status
         last_result_count = ActivityResult.objects.filter(session=session).count()
-        last_show_answers = cache.get(f'show_answers_{code}', 0)
+        last_show_answers = session.show_answers_at.timestamp() if session.show_answers_at else 0
         last_participant_count = session.participants.count()
         while True:
             session.refresh_from_db()
@@ -177,7 +177,7 @@ def sse_stream(request, code):
             activity_active = session.activity_active
             current_status = session.status
             current_result_count = ActivityResult.objects.filter(session=session).count()
-            current_show_answers = cache.get(f'show_answers_{code}', 0)
+            current_show_answers = session.show_answers_at.timestamp() if session.show_answers_at else 0
             current_participant_count = session.participants.count()
 
             slides = list(session.slides.filter(is_active=True).order_by('order'))
@@ -249,29 +249,30 @@ def facilitator_action(request, code, action):
     if action == 'next':
         if session.current_slide_index < total_slides - 1:
             session.current_slide_index += 1
+            session.show_answers_at = None
             session.save()
-            cache.delete(f'show_answers_{code}')
     elif action == 'prev':
         if session.current_slide_index > 0:
             session.current_slide_index -= 1
+            session.show_answers_at = None
             session.save()
-            cache.delete(f'show_answers_{code}')
     elif action == 'goto':
         index = int(request.POST.get('index', 0))
         if 0 <= index < total_slides:
             session.current_slide_index = index
+            session.show_answers_at = None
             session.save()
-            cache.delete(f'show_answers_{code}')
     elif action == 'start_activity':
         session.activity_active = True
         session.save()
     elif action == 'stop_activity':
         session.activity_active = False
+        session.show_answers_at = None
         session.save()
-        cache.delete(f'show_answers_{code}')
     elif action == 'end_session':
         session.status = 'ended'
         session.activity_active = False
+        session.show_answers_at = None
         session.save()
     elif action == 'start_session':
         session.status = 'active'
@@ -280,13 +281,15 @@ def facilitator_action(request, code, action):
         session.status = 'active'
         session.current_slide_index = 0
         session.activity_active = False
+        session.show_answers_at = None
         session.save()
         ActivityResult.objects.filter(session=session).delete()
         AnonymousPost.objects.filter(session=session).delete()
         session.participants.all().delete()
-        cache.delete(f'show_answers_{code}')
     elif action == 'show_answers':
-        cache.set(f'show_answers_{code}', time.time(), timeout=300)
+        from django.utils import timezone
+        session.show_answers_at = timezone.now()
+        session.save()
 
     return JsonResponse({
         'success': True,
