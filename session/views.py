@@ -9,7 +9,6 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.conf import settings
 from django.core.cache import cache
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Sum
 from .models import Session, Slide, Participant, Badge, ActivityResult, AnonymousPost
 
 
@@ -165,34 +164,21 @@ def sse_stream(request, code):
         }
 
     def event_stream():
-        try:
-            session.refresh_from_db()
-        except Session.DoesNotExist:
-            yield "event: error\ndata: {'message': 'Session not found'}\n\n"
-            return
+        session.refresh_from_db()
         last_index = session.current_slide_index
         last_activity = session.activity_active
         last_status = session.status
-        last_result_count = cache.get_or_set(f'result_count_{code}', lambda: ActivityResult.objects.filter(session_id=session.id).count(), 3)
+        last_result_count = ActivityResult.objects.filter(session=session).count()
         last_show_answers = cache.get(f'show_answers_{code}', 0)
-        last_participant_count = cache.get_or_set(f'pcount_{code}', lambda: Participant.objects.filter(session_id=session.id).count(), 3)
-        last_total_points = cache.get_or_set(f'ptotal_{code}', lambda: (Participant.objects.filter(session_id=session.id).aggregate(s=Sum('total_points'))['s'] or 0), 3)
+        last_participant_count = session.participants.count()
         while True:
-            try:
-                session.refresh_from_db()
-            except Session.DoesNotExist:
-                yield "event: session_ended\ndata: {'message': 'Session deleted'}\n\n"
-                break
-
+            session.refresh_from_db()
             current_index = session.current_slide_index
             activity_active = session.activity_active
             current_status = session.status
-            current_result_count = cache.get_or_set(f'result_count_{code}', lambda: ActivityResult.objects.filter(session_id=session.id).count(), 3)
+            current_result_count = ActivityResult.objects.filter(session=session).count()
             current_show_answers = cache.get(f'show_answers_{code}', 0)
-            current_participant_count = Participant.objects.filter(session_id=session.id).count()
-            current_total_points = Participant.objects.filter(session_id=session.id).aggregate(s=Sum('total_points'))['s'] or 0
-
-            cache.set(f'pcount_{code}', current_participant_count, 3)
+            current_participant_count = session.participants.count()
 
             slides = list(session.slides.filter(is_active=True).order_by('order'))
             total_slides = len(slides)
@@ -221,31 +207,32 @@ def sse_stream(request, code):
                 data = json.dumps({'result_count': current_result_count})
                 yield f"event: activity_result\ndata: {data}\n\n"
                 last_result_count = current_result_count
-                cache.set(f'result_count_{code}', current_result_count, 3)
 
             if current_show_answers != last_show_answers:
                 data = json.dumps({'timestamp': current_show_answers})
                 yield f"event: show_answers\ndata: {data}\n\n"
                 last_show_answers = current_show_answers
 
-            if current_participant_count != last_participant_count or current_total_points != last_total_points:
-                participants_list = list(
-                    Participant.objects.filter(session_id=session.id)
-                    .order_by('-total_points')
-                    .values('id', 'name', 'avatar', 'phone', 'total_points', 'streak', 'joined_at')
-                )
-                for p in participants_list:
-                    if p['joined_at']:
-                        p['joined_at'] = p['joined_at'].isoformat()
+            if current_participant_count != last_participant_count:
+                participants_list = []
+                for p in session.participants.all().order_by('-total_points'):
+                    participants_list.append({
+                        'id': p.id,
+                        'name': p.name,
+                        'avatar': p.avatar,
+                        'phone': p.phone,
+                        'total_points': p.total_points,
+                        'streak': p.streak,
+                        'joined_at': p.joined_at.isoformat() if p.joined_at else None,
+                    })
                 data = json.dumps({
                     'count': current_participant_count,
                     'participants': participants_list,
-                }, cls=DjangoJSONEncoder)
+                })
                 yield f"event: participant_change\ndata: {data}\n\n"
                 last_participant_count = current_participant_count
-                last_total_points = current_total_points
 
-            time.sleep(2)
+            time.sleep(1)
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
