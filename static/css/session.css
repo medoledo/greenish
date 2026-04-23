@@ -443,19 +443,20 @@ body {
 
 /* ==================== BADGE NOTIFICATION ==================== */
 .badge-notification {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.6); z-index: 1000; animation: fadeIn 0.3s ease-out;
+    position: fixed; top: 80px; right: 16px;
+    z-index: 1000; animation: slideInRight 0.4s ease-out;
 }
 .badge-popup {
-    background: var(--white); padding: 32px; border-radius: var(--radius-lg);
-    text-align: center; box-shadow: var(--shadow-lg);
-    animation: badgePop 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--white); padding: 14px 18px; border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex; align-items: center; gap: 12px;
+    min-width: 200px;
 }
-@keyframes badgePop { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
-.badge-popup-icon { font-size: 64px; display: block; margin-bottom: 12px; animation: gentleFloat 2s ease-in-out infinite; }
-.badge-popup-name { display: block; font-size: 24px; font-weight: 900; color: var(--primary-dark); margin-bottom: 4px; }
-.badge-popup-desc { display: block; font-size: 14px; color: var(--text-muted); }
+@keyframes slideInRight { 0% { transform: translateX(120%); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
+@keyframes slideOutRight { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(120%); opacity: 0; } }
+.badge-popup-icon { font-size: 32px; animation: gentleFloat 2s ease-in-out infinite; }
+.badge-popup-name { display: block; font-size: 15px; font-weight: 900; color: var(--primary-dark); margin-bottom: 2px; }
+.badge-popup-desc { display: block; font-size: 12px; color: var(--text-muted); }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ==================== POINTS ANIMATION ==================== */

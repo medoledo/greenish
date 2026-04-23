@@ -518,10 +518,22 @@
             contentEl.innerHTML = html;
         }
 
+        let postsPollerId = null;
+
+        function startPostsPoller() {
+            if (postsPollerId) clearInterval(postsPollerId);
+            postsPollerId = setInterval(refreshLiveStats, 2000);
+        }
+
+        function stopPostsPoller() {
+            if (postsPollerId) { clearInterval(postsPollerId); postsPollerId = null; }
+        }
+
         function renderFacCommitment(titleEl, contentEl) {
             const data = ACTIVITIES.commitment;
             titleEl.textContent = data.title;
-            contentEl.innerHTML = '<p style="color:rgba(255,255,255,0.6);font-style:italic;">"' + data.prompt + '"</p>';
+            contentEl.innerHTML = '<p style="color:rgba(255,255,255,0.6);font-style:italic;margin-bottom:12px;">💬 Live submissions will appear below</p>';
+            startPostsPoller();
         }
 
         function renderFacSortStats(titleEl, contentEl, config) {
