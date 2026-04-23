@@ -118,6 +118,7 @@
                     <button class="btn btn-danger btn-full" id="btn-end" onclick="sessionAction('end_session')">⏹ End Session</button>
                     <button class="btn btn-accent btn-full" id="btn-activity" onclick="toggleActivity()">🏁 Toggle Activity</button>
                     <button class="btn btn-outline btn-full" id="btn-leaderboard" onclick="toggleLeaderboard()">🏆 Leaderboard</button>
+                    <button class="btn btn-outline btn-full" id="btn-answers" onclick="showMemberAnswers()">📋 Show Members Answers</button>
                 </div>
             </div>
 
@@ -137,6 +138,10 @@
                         <button class="player-kick-btn" onclick="confirmKick({{ p.id }}, '{{ p.name|escapejs }}')" title="Remove player">✕</button>
                     </div>
                     {% endfor %}
+                </div>
+                <div class="submission-status" id="submission-status" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);">
+                    <h4 style="color:rgba(255,255,255,0.7);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Activity Progress</h4>
+                    <div id="submission-progress"></div>
                 </div>
             </div>
 
@@ -457,14 +462,31 @@
                     slot.classList.remove('slot-over');
                     const idx = e.dataTransfer.getData('text/plain');
                     const slotIdx = slot.dataset.slot;
+
+                    // If this slot already has an item, move it back to items pool
+                    const slotContent = document.getElementById('slot-content-' + slotIdx);
+                    if (slotContent && slotContent.firstChild) {
+                        const existingItem = slotContent.firstChild;
+                        const existingIdx = existingItem.dataset.idx;
+                        if (existingIdx !== undefined && existingIdx !== idx) {
+                            delete facDecomposeAnswers[existingIdx];
+                            existingItem.remove();
+                            const itemsContainer = document.getElementById('decompose-items');
+                            if (itemsContainer) {
+                                itemsContainer.appendChild(existingItem);
+                                existingItem.style.opacity = '1';
+                            }
+                        }
+                    }
+
                     facDecomposeAnswers[idx] = slotIdx;
                     const dragItem = document.querySelector('[data-idx="' + idx + '"]');
                     if (dragItem) {
                         dragItem.remove();
-                        const slotContent = document.getElementById('slot-content-' + slotIdx);
-                        if (slotContent) {
-                            slotContent.innerHTML = '';
-                            slotContent.appendChild(dragItem);
+                        const targetSlot = document.getElementById('slot-content-' + slotIdx);
+                        if (targetSlot) {
+                            targetSlot.innerHTML = '';
+                            targetSlot.appendChild(dragItem);
                             dragItem.style.opacity = '0.9';
                         }
                     }
@@ -531,45 +553,53 @@
         function refreshLiveStats() {
             const statsEl = document.getElementById('fac-live-stats');
             const feedEl = document.getElementById('fac-live-feed');
-            if (!statsEl || !feedEl) return;
+            const submissionEl = document.getElementById('submission-status');
+            const progressEl = document.getElementById('submission-progress');
 
             fetch('/session/' + SESSION_CODE + '/activity-stats/')
             .then(r => r.json())
             .then(data => {
-                let statsHTML = '';
-                if (data.total > 0) {
-                    statsHTML += '<div class="fac-stat"><strong>' + data.submitted + '</strong>/' + data.total + ' submitted</div>' +
-                        (data.correct !== null ? '<div class="fac-stat"><strong>' + data.correct + '</strong> correct</div>' : '') +
-                        '<div class="fac-stat"><strong>' + data.avg_points + '</strong> avg pts</div>';
-                } else {
-                    statsHTML += '<div class="fac-stat">Waiting for submissions...</div>';
+                if (statsEl || feedEl) {
+                    let statsHTML = '';
+                    if (data.total > 0) {
+                        statsHTML += '<div class="fac-stat"><strong>' + data.submitted + '</strong>/' + data.total + ' submitted</div>' +
+                            (data.correct !== null ? '<div class="fac-stat"><strong>' + data.correct + '</strong> correct</div>' : '') +
+                            '<div class="fac-stat"><strong>' + data.avg_points + '</strong> avg pts</div>';
+                    } else {
+                        statsHTML += '<div class="fac-stat">Waiting for submissions...</div>';
+                    }
+                    if (statsEl) statsEl.innerHTML = statsHTML;
+
+                    if (feedEl) {
+                        if (data.posts && data.posts.length > 0) {
+                            feedEl.innerHTML = data.posts.map(p =>
+                                '<div class="fac-feed-item"><span class="fac-feed-avatar">' + p.avatar + '</span><div><span class="fac-feed-name">' + p.name + '</span><div class="fac-feed-content">' + p.content + '</div></div></div>'
+                            ).join('');
+                        } else {
+                            feedEl.innerHTML = '';
+                        }
+                    }
                 }
 
-                // Show submitted vs not-submitted users
-                if (data.submitted_users.length > 0 || data.not_submitted_users.length > 0) {
-                    statsHTML += '<div style="width:100%;margin-top:12px;">';
-                    if (data.submitted_users.length > 0) {
-                        statsHTML += '<div style="font-size:12px;color:#52B788;font-weight:700;margin-bottom:6px;">✅ Submitted (' + data.submitted_users.length + ')</div>';
-                        statsHTML += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">';
-                        statsHTML += data.submitted_users.map(u => '<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(82,183,136,0.2);border-radius:12px;font-size:12px;color:#fff;">' + u.avatar + ' ' + u.name + '</span>').join('');
-                        statsHTML += '</div>';
+                // Always update submission status in sidebar
+                if (submissionEl && progressEl && data.total > 0) {
+                    submissionEl.style.display = 'block';
+                    let html = '';
+                    if (data.submitted_users && data.submitted_users.length > 0) {
+                        html += '<div style="font-size:12px;color:#52B788;font-weight:700;margin-bottom:6px;">✅ Submitted (' + data.submitted_users.length + '/' + data.total + ')</div>';
+                        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">';
+                        html += data.submitted_users.map(u => '<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(82,183,136,0.2);border-radius:12px;font-size:12px;color:#fff;">' + u.avatar + ' ' + u.name + '</span>').join('');
+                        html += '</div>';
                     }
-                    if (data.not_submitted_users.length > 0) {
-                        statsHTML += '<div style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:700;margin-bottom:6px;">⏳ Not Submitted (' + data.not_submitted_users.length + ')</div>';
-                        statsHTML += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
-                        statsHTML += data.not_submitted_users.map(u => '<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(255,255,255,0.08);border-radius:12px;font-size:12px;color:rgba(255,255,255,0.6);">' + u.avatar + ' ' + u.name + '</span>').join('');
-                        statsHTML += '</div>';
+                    if (data.not_submitted_users && data.not_submitted_users.length > 0) {
+                        html += '<div style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:700;margin-bottom:6px;">⏳ Not Submitted (' + data.not_submitted_users.length + ')</div>';
+                        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+                        html += data.not_submitted_users.map(u => '<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(255,255,255,0.08);border-radius:12px;font-size:12px;color:rgba(255,255,255,0.6);">' + u.avatar + ' ' + u.name + '</span>').join('');
+                        html += '</div>';
                     }
-                    statsHTML += '</div>';
-                }
-                statsEl.innerHTML = statsHTML;
-
-                if (data.posts && data.posts.length > 0) {
-                    feedEl.innerHTML = data.posts.map(p =>
-                        '<div class="fac-feed-item"><span class="fac-feed-avatar">' + p.avatar + '</span><div><span class="fac-feed-name">' + p.name + '</span><div class="fac-feed-content">' + p.content + '</div></div></div>'
-                    ).join('');
-                } else {
-                    feedEl.innerHTML = '';
+                    progressEl.innerHTML = html;
+                } else if (submissionEl && progressEl) {
+                    submissionEl.style.display = 'none';
                 }
             });
         }
@@ -831,13 +861,49 @@
         setInterval(function() {
             loadLeaderboard();
             updateJoinedTimers();
-            if (activityActive && currentSlideData && currentSlideData.slide_type === 'activity') {
-                refreshLiveStats();
-            }
+            refreshLiveStats();
         }, 5000);
 
         if (activityActive && currentSlideData && currentSlideData.slide_type === 'activity') {
             renderFacilitatorActivity(currentSlideData.activity_type, currentSlideData.activity_config);
+        }
+
+        refreshLiveStats();
+
+        function showMemberAnswers() {
+            fetch('/session/' + SESSION_CODE + '/activity-answers/')
+            .then(r => r.json())
+            .then(data => {
+                let html = '<div class="answers-modal-overlay" onclick="if(event.target===this)this.remove()">';
+                html += '<div class="answers-modal-card">';
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+                html += '<h3 style="color:#fff;margin:0;">📋 ' + (data.slide_title || 'Activity') + ' — Answers</h3>';
+                html += '<button onclick="this.closest(\'.answers-modal-overlay\').remove()" style="background:none;border:none;color:#fff;font-size:24px;cursor:pointer;">&times;</button>';
+                html += '</div>';
+                if (data.answers.length === 0) {
+                    html += '<p style="color:rgba(255,255,255,0.6);text-align:center;padding:24px;">No answers submitted yet.</p>';
+                } else {
+                    html += '<div style="display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;">';
+                    data.answers.forEach(a => {
+                        const bgColor = a.is_correct ? 'rgba(82,183,136,0.2)' : (a.is_correct === false ? 'rgba(231,111,81,0.2)' : 'rgba(255,255,255,0.08)');
+                        const borderColor = a.is_correct ? '#52B788' : (a.is_correct === false ? '#E76F51' : 'rgba(255,255,255,0.2)');
+                        html += '<div style="padding:10px 14px;border-radius:10px;background:' + bgColor + ';border:1px solid ' + borderColor + ';display:flex;align-items:center;gap:10px;">';
+                        html += '<span style="font-size:22px;">' + a.participant_avatar + '</span>';
+                        html += '<div style="flex:1;min-width:0;">';
+                        html += '<div style="font-weight:700;color:#fff;font-size:14px;">' + a.participant_name + '</div>';
+                        html += '<div style="color:rgba(255,255,255,0.8);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + a.answer + '</div>';
+                        html += '</div>';
+                        html += '<div style="text-align:right;flex-shrink:0;">';
+                        if (a.is_correct === true) html += '<span style="color:#52B788;font-weight:700;">✅</span>';
+                        else if (a.is_correct === false) html += '<span style="color:#E76F51;font-weight:700;">❌</span>';
+                        html += '<div style="color:#FFD700;font-size:13px;font-weight:700;">+' + a.points_earned + '</div>';
+                        html += '</div></div>';
+                    });
+                    html += '</div>';
+                }
+                html += '</div></div>';
+                document.body.insertAdjacentHTML('beforeend', html);
+            });
         }
 
         connectSSE();

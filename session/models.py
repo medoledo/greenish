@@ -74,6 +74,9 @@ class Badge(models.Model):
     trigger_type = models.CharField(max_length=10, choices=TRIGGER_TYPE_CHOICES)
     trigger_value = models.PositiveIntegerField(default=0)
 
+    class Meta:
+        unique_together = ['name', 'trigger_type', 'trigger_value']
+
     def __str__(self):
         return f"{self.icon} {self.name}"
 
@@ -91,6 +94,9 @@ class Participant(models.Model):
 
     class Meta:
         unique_together = ['session', 'name']
+        indexes = [
+            models.Index(fields=['session', '-total_points']),
+        ]
 
     def __str__(self):
         return f"{self.avatar} {self.name} ({self.total_points}pts)"
@@ -108,6 +114,10 @@ class ActivityResult(models.Model):
 
     class Meta:
         ordering = ['-submitted_at']
+        indexes = [
+            models.Index(fields=['session', 'slide']),
+            models.Index(fields=['session', '-submitted_at']),
+        ]
 
     def __str__(self):
         return f"{self.participant.name}: {self.activity_type} ({self.points_earned}pts)"
@@ -123,6 +133,9 @@ class AnonymousPost(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['session', 'slide', 'is_public', '-created_at']),
+        ]
 
     def __str__(self):
         return f"Post: {self.content[:50]}"

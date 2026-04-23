@@ -428,20 +428,39 @@
                 slot.classList.remove('slot-over');
                 const idx = e.dataTransfer.getData('text/plain');
                 const slotIdx = slot.dataset.slot;
+
+                // If this slot already has an item, move it back to items pool
+                const slotContent = document.getElementById('slot-content-' + slotIdx);
+                if (slotContent && slotContent.firstChild) {
+                    const existingItem = slotContent.firstChild;
+                    // Clear the old answer for the existing item
+                    const existingIdx = existingItem.dataset.idx;
+                    if (existingIdx !== undefined && existingIdx !== idx) {
+                        delete decomposeAnswers[existingIdx];
+                        existingItem.remove();
+                        const itemsContainer = document.getElementById('decompose-items');
+                        if (itemsContainer) {
+                            itemsContainer.appendChild(existingItem);
+                            existingItem.style.opacity = '1';
+                        }
+                    }
+                }
+
                 decomposeAnswers[idx] = slotIdx;
 
                 const dragItem = document.querySelector('[data-idx="' + idx + '"]');
                 if (dragItem) {
                     dragItem.remove();
-                    const slotContent = document.getElementById('slot-content-' + slotIdx);
-                    if (slotContent) {
-                        slotContent.innerHTML = '';
-                        slotContent.appendChild(dragItem);
+                    const targetSlot = document.getElementById('slot-content-' + slotIdx);
+                    if (targetSlot) {
+                        targetSlot.innerHTML = '';
+                        targetSlot.appendChild(dragItem);
                         dragItem.style.opacity = '0.9';
                         dragItem.style.cursor = 'grab';
                     }
                 }
             });
+        });
         });
     }
 

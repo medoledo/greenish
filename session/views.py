@@ -9,6 +9,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.conf import settings
 from django.core.cache import cache
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db.models import Sum
 from .models import Session, Slide, Participant, Badge, ActivityResult, AnonymousPost
 
 
@@ -172,10 +173,10 @@ def sse_stream(request, code):
         last_index = session.current_slide_index
         last_activity = session.activity_active
         last_status = session.status
-        last_result_count = ActivityResult.objects.filter(session=session).count()
+        last_result_count = cache.get_or_set(f'result_count_{code}', lambda: ActivityResult.objects.filter(session_id=session.id).count(), 3)
         last_show_answers = cache.get(f'show_answers_{code}', 0)
-        last_participant_count = session.participants.count()
-        last_total_points = sum(p.total_points for p in session.participants.all())
+        last_participant_count = cache.get_or_set(f'pcount_{code}', lambda: Participant.objects.filter(session_id=session.id).count(), 3)
+        last_total_points = cache.get_or_set(f'ptotal_{code}', lambda: (Participant.objects.filter(session_id=session.id).aggregate(s=Sum('total_points'))['s'] or 0), 3)
         while True:
             try:
                 session.refresh_from_db()
@@ -186,10 +187,12 @@ def sse_stream(request, code):
             current_index = session.current_slide_index
             activity_active = session.activity_active
             current_status = session.status
-            current_result_count = ActivityResult.objects.filter(session=session).count()
+            current_result_count = cache.get_or_set(f'result_count_{code}', lambda: ActivityResult.objects.filter(session_id=session.id).count(), 3)
             current_show_answers = cache.get(f'show_answers_{code}', 0)
-            current_participant_count = session.participants.count()
-            current_total_points = sum(p.total_points for p in session.participants.all())
+            current_participant_count = Participant.objects.filter(session_id=session.id).count()
+            current_total_points = Participant.objects.filter(session_id=session.id).aggregate(s=Sum('total_points'))['s'] or 0
+
+            cache.set(f'pcount_{code}', current_participant_count, 3)
 
             slides = list(session.slides.filter(is_active=True).order_by('order'))
             total_slides = len(slides)
@@ -218,6 +221,7 @@ def sse_stream(request, code):
                 data = json.dumps({'result_count': current_result_count})
                 yield f"event: activity_result\ndata: {data}\n\n"
                 last_result_count = current_result_count
+                cache.set(f'result_count_{code}', current_result_count, 3)
 
             if current_show_answers != last_show_answers:
                 data = json.dumps({'timestamp': current_show_answers})
@@ -225,17 +229,14 @@ def sse_stream(request, code):
                 last_show_answers = current_show_answers
 
             if current_participant_count != last_participant_count or current_total_points != last_total_points:
-                participants_list = []
-                for p in session.participants.all().order_by('-total_points'):
-                    participants_list.append({
-                        'id': p.id,
-                        'name': p.name,
-                        'avatar': p.avatar,
-                        'phone': p.phone,
-                        'total_points': p.total_points,
-                        'streak': p.streak,
-                        'joined_at': p.joined_at.isoformat() if p.joined_at else None,
-                    })
+                participants_list = list(
+                    Participant.objects.filter(session_id=session.id)
+                    .order_by('-total_points')
+                    .values('id', 'name', 'avatar', 'phone', 'total_points', 'streak', 'joined_at')
+                )
+                for p in participants_list:
+                    if p['joined_at']:
+                        p['joined_at'] = p['joined_at'].isoformat()
                 data = json.dumps({
                     'count': current_participant_count,
                     'participants': participants_list,
@@ -244,7 +245,7 @@ def sse_stream(request, code):
                 last_participant_count = current_participant_count
                 last_total_points = current_total_points
 
-            time.sleep(1)
+            time.sleep(2)
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
@@ -414,7 +415,7 @@ def submit_post(request, code):
 def get_posts(request, code):
     session = get_object_or_404(Session, code=code)
     slide_id = request.GET.get('slide_id')
-    posts = session.posts.filter(is_public=True)
+    posts = session.posts.select_related('participant').filter(is_public=True)
     if slide_id:
         posts = posts.filter(slide_id=slide_id)
     posts_list = [{
@@ -431,7 +432,7 @@ def get_posts(request, code):
 @never_cache
 def get_leaderboard(request, code):
     session = get_object_or_404(Session, code=code)
-    participants = session.participants.all().order_by('-total_points')[:20]
+    participants = session.participants.prefetch_related('badges').order_by('-total_points')[:20]
     leaderboard = [{
         'id': p.id,
         'name': p.name,
@@ -465,7 +466,7 @@ def get_activity_stats(request, code):
     }
 
     if current_slide:
-        results = ActivityResult.objects.filter(session=session, slide=current_slide)
+        results = ActivityResult.objects.filter(session=session, slide=current_slide).select_related('participant')
         stats['submitted'] = results.count()
         correct_count = results.filter(is_correct=True).count()
         stats['correct'] = correct_count if correct_count > 0 else 0
@@ -512,6 +513,41 @@ def get_slide_data(request, code, slide_id):
         'image': slide.image.url if slide.image else None,
     }
     return JsonResponse(data)
+
+
+@require_GET
+@never_cache
+def get_activity_answers(request, code):
+    session = get_object_or_404(Session, code=code)
+    current_index = session.current_slide_index
+    slides = list(session.slides.filter(is_active=True).order_by('order'))
+    current_slide = slides[current_index] if current_index < len(slides) else None
+    results = []
+    if current_slide:
+        activity_results = ActivityResult.objects.filter(
+            session=session, slide=current_slide
+        ).select_related('participant').order_by('-submitted_at')
+        for r in activity_results:
+            answer_display = r.answer
+            try:
+                parsed = json.loads(r.answer)
+                if isinstance(parsed, dict):
+                    answer_display = ', '.join(f'{k}: {v}' for k, v in parsed.items())
+                elif isinstance(parsed, list):
+                    answer_display = ', '.join(str(v) for v in parsed)
+            except (json.JSONDecodeError, TypeError):
+                pass
+            results.append({
+                'participant_name': r.participant.name if r.participant else 'Unknown',
+                'participant_avatar': r.participant.avatar if r.participant else '🌱',
+                'activity_type': r.activity_type,
+                'answer': answer_display,
+                'raw_answer': r.answer,
+                'is_correct': r.is_correct,
+                'points_earned': r.points_earned,
+                'submitted_at': r.submitted_at.strftime('%H:%M:%S') if r.submitted_at else '',
+            })
+    return JsonResponse({'answers': results, 'slide_title': current_slide.title if current_slide else '', 'activity_type': current_slide.activity_type if current_slide else ''})
 
 
 @require_GET
