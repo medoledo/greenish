@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ session.title }} - Greenish CMS</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link rel="stylesheet" href="/static/css/cms.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body class="cms-page">
+    <header class="cms-header">
+        <div class="cms-header-left">
+            <img src="/static/img/logo.svg" alt="Greenish" class="cms-logo">
+            <h1>{{ session.title }}</h1>
+        </div>
+        <div class="cms-header-right">
+            <a href="{% url 'cms_sessions' %}" class="btn btn-outline">← All Sessions</a>
+            <a href="{% url 'cms_slides' code=session.code %}" class="btn btn-primary">Manage Slides</a>
+        </div>
+    </header>
+
+    <main class="cms-main">
+        <div class="cms-section-header">
+            <h2>Session Details</h2>
+        </div>
+
+        <div class="cms-session-card" style="max-width:600px;">
+            <div class="session-card-header">
+                <span class="session-code">{{ session.code }}</span>
+                <span class="session-status status-{{ session.status }}">{{ session.get_status_display }}</span>
+            </div>
+            <h3>{{ session.title }}</h3>
+            <p>Facilitator: {{ session.facilitator_name }}</p>
+            <p>Created: {{ session.created_at|date:"M d, Y H:i" }}</p>
+            <p>Slides: {{ session.slides.count }}</p>
+            <p>Participants: {{ session.participants.count }}</p>
+            <p>Results: {{ session.results.count }}</p>
+            <p>Posts: {{ session.posts.count }}</p>
+
+            <div class="session-card-actions" style="margin-top:16px;">
+                <a href="{% url 'session_facilitator' code=session.code %}" class="btn btn-primary btn-small">Facilitator View</a>
+                <a href="{% url 'session_participant' code=session.code %}" class="btn btn-secondary btn-small">Participant View</a>
+                <a href="{% url 'cms_export' code=session.code %}" class="btn btn-outline btn-small">JSON Export</a>
+                <a href="{% url 'cms_export_csv' code=session.code %}" class="btn btn-outline btn-small">CSV Export</a>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

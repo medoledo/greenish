@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Session - Greenish</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body class="join-page">
+    <div class="form-container">
+        <div class="form-logo">
+            <img src="/static/img/logo.svg" alt="Greenish" class="logo-img-small">
+        </div>
+        <h1>Join Session</h1>
+        <p class="form-subtitle">{{ session.title }}</p>
+        <p class="form-code">Code: <strong>{{ session.code }}</strong></p>
+
+        {% if error %}
+        <div class="form-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="name">Your Name</label>
+                <input type="text" id="name" name="name" placeholder="Enter your name" class="form-input" required maxlength="50">
+            </div>
+            <div class="form-group">
+                <label>Pick Your Avatar</label>
+                <div class="avatar-grid">
+                    {% for emoji, label in avatar_choices %}
+                    <button type="button" class="avatar-btn" data-avatar="{{ emoji }}" title="{{ label }}">{{ emoji }}</button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" id="avatar" name="avatar" value="🌱">
+            </div>
+            <button type="submit" class="btn btn-primary btn-large btn-full">
+                👋 Join Session
+            </button>
+        </form>
+
+        <a href="/session/" class="back-link">← Back to Home</a>
+    </div>
+
+    <script>
+        document.querySelectorAll('.avatar-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.avatar-btn').forEach(b => b.classList.remove('selected'));
+                this.classList.add('selected');
+                document.getElementById('avatar').value = this.dataset.avatar;
+            });
+        });
+    </script>
+</body>
+</html>

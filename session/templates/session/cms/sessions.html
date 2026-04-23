@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions - Greenish CMS</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link rel="stylesheet" href="/static/css/cms.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body class="cms-page">
+    <header class="cms-header">
+        <div class="cms-header-left">
+            <img src="/static/img/logo.svg" alt="Greenish" class="cms-logo">
+            <h1>Greenish CMS</h1>
+        </div>
+        <div class="cms-header-right">
+            <a href="/admin/" class="btn btn-outline">Django Admin</a>
+            <a href="/session/" class="btn btn-secondary">← Back to App</a>
+        </div>
+    </header>
+
+    <main class="cms-main">
+        <div class="cms-section-header">
+            <h2>Sessions</h2>
+            <a href="/session/create/" class="btn btn-primary">+ New Session</a>
+        </div>
+
+        {% if sessions %}
+        <div class="cms-sessions-grid">
+            {% for session in sessions %}
+            <div class="cms-session-card">
+                <div class="session-card-header">
+                    <span class="session-code">{{ session.code }}</span>
+                    <span class="session-status status-{{ session.status }}">{{ session.get_status_display }}</span>
+                </div>
+                <h3 class="session-card-title">{{ session.title }}</h3>
+                <p class="session-card-facilitator">by {{ session.facilitator_name }}</p>
+                <p class="session-card-meta">
+                    {{ session.slides.count }} slides &middot;
+                    {{ session.participants.count }} participants &middot;
+                    {{ session.created_at|date:"M d, Y" }}
+                </p>
+                <div class="session-card-actions">
+                    <a href="{% url 'cms_slides' code=session.code %}" class="btn btn-primary btn-small">Manage Slides</a>
+                    <a href="{% url 'cms_export' code=session.code %}" class="btn btn-outline btn-small">JSON Export</a>
+                    <a href="{% url 'cms_export_csv' code=session.code %}" class="btn btn-outline btn-small">CSV Export</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="cms-empty">
+            <div class="empty-icon">🌿</div>
+            <h3>No sessions yet</h3>
+            <p>Create your first session to get started</p>
+            <a href="/session/create/" class="btn btn-primary">Create Session</a>
+        </div>
+        {% endif %}
+    </main>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Session - Greenish</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body class="create-page">
+    <div class="form-container">
+        <div class="form-logo">
+            <img src="/static/img/logo.svg" alt="Greenish" class="logo-img-small">
+        </div>
+        <h1>Create a Session</h1>
+        <p class="form-subtitle">Set up your waste management awareness session</p>
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="title">Session Title</label>
+                <input type="text" id="title" name="title" placeholder="e.g., Greenish Club - Dahshur" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label for="facilitator_name">Your Name</label>
+                <input type="text" id="facilitator_name" name="facilitator_name" placeholder="e.g., Ahmed" class="form-input" required>
+            </div>
+            <div class="form-group">
+                <label for="facilitator_password">Facilitator Password</label>
+                <input type="password" id="facilitator_password" name="facilitator_password" placeholder="Password to access facilitator view" class="form-input" required>
+                <small class="form-hint">You'll need this to access the facilitator control panel</small>
+            </div>
+            <button type="submit" class="btn btn-primary btn-large btn-full">
+                🌿 Create Session
+            </button>
+        </form>
+
+        <a href="/session/" class="back-link">← Back to Home</a>
+    </div>
+</body>
+</html>

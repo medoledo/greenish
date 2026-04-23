@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facilitator Login - Greenish</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body class="join-page">
+    <div class="form-container">
+        <div class="form-logo">
+            <img src="/static/img/logo.svg" alt="Greenish" class="logo-img-small">
+        </div>
+        <h1>Facilitator Access</h1>
+        <p class="form-subtitle">{{ session.title }}</p>
+        <p class="form-code">Code: <strong>{{ session.code }}</strong></p>
+
+        {% if error %}
+        <div class="form-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <input type="password" id="facilitator_password" name="facilitator_password" class="form-input" placeholder="Enter password" required autofocus>
+            </div>
+            <button type="submit" class="btn btn-primary btn-large btn-full">Enter</button>
+        </form>
+
+        <a href="/session/" class="back-link">← Back</a>
+    </div>
+</body>
+</html>

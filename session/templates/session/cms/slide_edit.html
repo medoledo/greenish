@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if slide %}Edit Slide{% else %}Add Slide{% endif %} - Greenish CMS</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link rel="stylesheet" href="/static/css/cms.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body class="cms-page">
+    <header class="cms-header">
+        <div class="cms-header-left">
+            <img src="/static/img/logo.svg" alt="Greenish" class="cms-logo">
+            <h1>{% if slide %}Edit Slide{% else %}Add Slide{% endif %}</h1>
+        </div>
+        <div class="cms-header-right">
+            <a href="{% url 'cms_slides' code=session.code %}" class="btn btn-outline">← Back to Slides</a>
+        </div>
+    </header>
+
+    <main class="cms-main">
+        <form method="post" enctype="multipart/form-data" class="cms-form">
+            {% csrf_token %}
+
+            <div class="form-section">
+                <h3>Slide Type</h3>
+                <div class="form-row">
+                    <div class="form-group form-half">
+                        <label for="slide_type">Type</label>
+                        <select id="slide_type" name="slide_type" class="form-input" onchange="toggleActivityFields()">
+                            <option value="info" {% if slide.slide_type == 'info' %}selected{% endif %}>Information</option>
+                            <option value="activity" {% if slide.slide_type == 'activity' %}selected{% endif %}>Activity</option>
+                        </select>
+                    </div>
+                    <div class="form-group form-half" id="activity-type-group" style="display:{% if slide.slide_type == 'activity' %}block{% else %}none{% endif %}">
+                        <label for="activity_type">Activity Type</label>
+                        <select id="activity_type" name="activity_type" class="form-input" onchange="toggleActivityConfig()">
+                            <option value="">-- Select --</option>
+                            {% for value, label in activity_types %}
+                            <option value="{{ value }}" {% if slide.activity_type == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" name="shocking_fact" id="shocking_fact" {% if slide.shocking_fact %}checked{% endif %}>
+                        <span>⚡ Shocking Fact (bold & provocative style)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h3>Content</h3>
+                <div class="form-group">
+                    <label for="title">Slide Title</label>
+                    <input type="text" id="title" name="title" class="form-input" value="{{ slide.title|default:'' }}" placeholder="e.g., What is Waste?">
+                </div>
+                <div class="form-group">
+                    <label for="content">Slide Content</label>
+                    <textarea id="content" name="content" class="form-input form-textarea" rows="6" placeholder="Write your slide content here...">{{ slide.content|default:'' }}</textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group form-half">
+                        <label for="image">Image (optional)</label>
+                        <input type="file" id="image" name="image" class="form-input" accept="image/*">
+                        {% if slide.image %}<small class="form-hint">Current: {{ slide.image.url }}</small>{% endif %}
+                    </div>
+                    <div class="form-group form-half">
+                        <label for="order">Order</label>
+                        <input type="number" id="order" name="order" class="form-input" value="{{ slide.order|default:0 }}" min="0">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Config Sections -->
+            <div class="form-section activity-config" id="config-poll" style="display:none;">
+                <h3>🧩 Poll Configuration</h3>
+                <div class="form-group">
+                    <label for="poll_question">Question</label>
+                    <input type="text" id="poll_question" name="poll_question" class="form-input" value="{% if slide.activity_config.question %}{{ slide.activity_config.question }}{% endif %}" placeholder="e.g., Is this recyclable?">
+                </div>
+                <div class="form-group">
+                    <label for="poll_options">Options (comma-separated)</label>
+                    <input type="text" id="poll_options" name="poll_options" class="form-input" value="{% if slide.activity_config.options %}{{ slide.activity_config.options|join:',' }}{% endif %}" placeholder="e.g., Yes, No, Maybe">
+                </div>
+                <div class="form-group">
+                    <label for="poll_correct">Correct Option Index (0-based)</label>
+                    <input type="number" id="poll_correct" name="poll_correct" class="form-input" value="{% if slide.activity_config.correct %}{{ slide.activity_config.correct }}{% endif %}" placeholder="e.g., 0">
+                </div>
+            </div>
+
+            <div class="form-section activity-config" id="config-sort" style="display:none;">
+                <h3>♻️ Sort Configuration</h3>
+                <div class="form-group">
+                    <label for="sort_items">Items (comma-separated)</label>
+                    <input type="text" id="sort_items" name="sort_items" class="form-input" placeholder="e.g., Newspaper, Plastic Bottle, Banana Peel, Aluminum Can">
+                </div>
+                <div class="form-group">
+                    <label for="sort_bins">Bins (comma-separated)</label>
+                    <input type="text" id="sort_bins" name="sort_bins" class="form-input" placeholder="e.g., Reuse, Recycle, Dispose">
+                </div>
+                <div class="form-group">
+                    <label for="sort_correct">Correct Matches (item:bin; separated)</label>
+                    <input type="text" id="sort_correct" name="sort_correct" class="form-input" placeholder="Newspaper:Recycle; Banana Peel:Dispose; Plastic Bottle:Recycle">
+                </div>
+            </div>
+
+            <div class="form-section activity-config" id="config-guess" style="display:none;">
+                <h3>⏳ Guess Timeline Configuration</h3>
+                <div class="form-group">
+                    <label for="guess_question">Question</label>
+                    <input type="text" id="guess_question" name="guess_question" class="form-input" value="{% if slide.activity_config.question %}{{ slide.activity_config.question }}{% endif %}" placeholder="How long does this take to decompose?">
+                </div>
+                <div class="form-group">
+                    <label for="guess_item">Item Name</label>
+                    <input type="text" id="guess_item" name="guess_item" class="form-input" value="{% if slide.activity_config.item %}{{ slide.activity_config.item }}{% endif %}" placeholder="e.g., Plastic Bag">
+                </div>
+                <div class="form-group">
+                    <label for="guess_options">Options (comma-separated)</label>
+                    <input type="text" id="guess_options" name="guess_options" class="form-input" value="{% if slide.activity_config.options %}{{ slide.activity_config.options|join:',' }}{% endif %}" placeholder="e.g., 2 weeks, 5 months, 100 years, 1 million years">
+                </div>
+                <div class="form-group">
+                    <label for="guess_correct">Correct Answer</label>
+                    <input type="text" id="guess_correct" name="guess_correct" class="form-input" value="{% if slide.activity_config.correct %}{{ slide.activity_config.correct }}{% endif %}" placeholder="e.g., 1 million years">
+                </div>
+            </div>
+
+            <div class="form-section activity-config" id="config-discuss" style="display:none;">
+                <h3>💬 Discussion Wall Configuration</h3>
+                <div class="form-group">
+                    <label for="discuss_prompt">Discussion Prompt</label>
+                    <textarea id="discuss_prompt" name="discuss_prompt" class="form-input form-textarea" rows="3" placeholder="What waste challenges does your community face?">{% if slide.activity_config.prompt %}{{ slide.activity_config.prompt }}{% endif %}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="discuss_max_chars">Max Characters</label>
+                    <input type="number" id="discuss_max_chars" name="discuss_max_chars" class="form-input" value="{% if slide.activity_config.max_chars %}{{ slide.activity_config.max_chars }}{% else %}280{% endif %}">
+                </div>
+            </div>
+
+            <div class="form-section activity-config" id="config-commit" style="display:none;">
+                <h3>💪 Commitment Wall Configuration</h3>
+                <div class="form-group">
+                    <label for="commit_prompt">Prompt</label>
+                    <input type="text" id="commit_prompt" name="commit_prompt" class="form-input" value="{% if slide.activity_config.prompt %}{{ slide.activity_config.prompt }}{% else %}I will...{% endif %}" placeholder="e.g., I will...">
+                </div>
+            </div>
+
+            <div class="form-section activity-config" id="config-match" style="display:none;">
+                <h3>🧩 Definition Match Configuration</h3>
+                <div class="form-group">
+                    <label>Term-Definition Pairs</label>
+                    <div id="match-pairs">
+                        {% if slide.activity_config.pairs %}
+                            {% for pair in slide.activity_config.pairs %}
+                            <div class="match-pair-row">
+                                <input type="text" name="match_term_{{ forloop.counter0 }}" class="form-input form-half" placeholder="Term" value="{{ pair.term }}">
+                                <input type="text" name="match_definition_{{ forloop.counter0 }}" class="form-input form-half" placeholder="Definition" value="{{ pair.definition }}">
+                                <button type="button" class="btn btn-danger btn-small" onclick="this.parentElement.remove()">×</button>
+                            </div>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <button type="button" class="btn btn-outline" onclick="addMatchPair()">+ Add Pair</button>
+                    <input type="hidden" id="match_pair_count" name="match_pair_count" value="{{ slide.activity_config.pairs|length|default:'0' }}">
+                </div>
+            </div>
+
+            <div class="form-section activity-config" id="config-problem" style="display:none;">
+                <h3>🔍 Problem Identification Configuration</h3>
+                <div class="form-group">
+                    <label for="problem_prompt">Prompt</label>
+                    <input type="text" id="problem_prompt" name="problem_prompt" class="form-input" value="{% if slide.activity_config.prompt %}{{ slide.activity_config.prompt }}{% else %}What problems do you see?{% endif %}">
+                </div>
+            </div>
+
+            <div class="form-section activity-config" id="config-case_study" style="display:none;">
+                <h3>📋 Case Study / Transfer Station Configuration</h3>
+                <div class="form-group">
+                    <label for="case_description">Case Description</label>
+                    <textarea id="case_description" name="case_description" class="form-input form-textarea" rows="6" placeholder="Describe the case study...">{% if slide.activity_config.description %}{{ slide.activity_config.description }}{% endif %}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="case_questions">Questions (one per line)</label>
+                    <textarea id="case_questions" name="case_questions" class="form-input form-textarea" rows="4" placeholder="One question per line">{% if slide.activity_config.questions %}{{ slide.activity_config.questions|join:'\n' }}{% endif %}</textarea>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large">💾 Save Slide</button>
+                <a href="{% url 'cms_slides' code=session.code %}" class="btn btn-outline btn-large">Cancel</a>
+            </div>
+        </form>
+    </main>
+
+    <script>
+        function toggleActivityFields() {
+            const isActivity = document.getElementById('slide_type').value === 'activity';
+            document.getElementById('activity-type-group').style.display = isActivity ? 'block' : 'none';
+            if (!isActivity) {
+                hideAllConfigs();
+            } else {
+                toggleActivityConfig();
+            }
+        }
+
+        function toggleActivityConfig() {
+            hideAllConfigs();
+            const type = document.getElementById('activity_type').value;
+            if (type) {
+                const config = document.getElementById('config-' + type);
+                if (config) config.style.display = 'block';
+            }
+        }
+
+        function hideAllConfigs() {
+            document.querySelectorAll('.activity-config').forEach(el => el.style.display = 'none');
+        }
+
+        let pairCounter = {{ slide.activity_config.pairs|length|default:'0' }};
+        function addMatchPair() {
+            pairCounter++;
+            document.getElementById('match_pair_count').value = pairCounter;
+            const div = document.createElement('div');
+            div.className = 'match-pair-row';
+            div.innerHTML = `
+                <input type="text" name="match_term_${pairCounter}" class="form-input form-half" placeholder="Term">
+                <input type="text" name="match_definition_${pairCounter}" class="form-input form-half" placeholder="Definition">
+                <button type="button" class="btn btn-danger btn-small" onclick="this.parentElement.remove()">×</button>
+            `;
+            document.getElementById('match-pairs').appendChild(div);
+        }
+
+        toggleActivityFields();
+    </script>
+</body>
+</html>

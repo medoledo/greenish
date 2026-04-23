@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facilitator - {{ session.title }}</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body class="facilitator-page">
+    <header class="facilitator-header">
+        <div class="header-left">
+            <img src="/static/img/logo.svg" alt="Greenish" class="logo-facilitator">
+            <h1 class="header-title">{{ session.title }}</h1>
+        </div>
+        <div class="header-right">
+            <span class="session-code">Code: <strong>{{ session.code }}</strong></span>
+            <span class="participant-count" id="participant-count">{{ participant_count }} participants</span>
+            <span class="session-status status-{{ session.status }}" id="session-status">{{ session.status }}</span>
+        </div>
+    </header>
+
+    <main class="facilitator-main">
+        <div class="slide-display" id="slide-display">
+            {% if current_slide %}
+            <div class="slide-content {% if current_slide.shocking_fact %}shocking{% endif %}" id="current-slide" data-slide-id="{{ current_slide.id }}">
+                {% if current_slide.image %}
+                <img src="{{ current_slide.image.url }}" alt="{{ current_slide.title }}" class="slide-image">
+                {% endif %}
+                {% if current_slide.title %}
+                <h2 class="slide-title {% if current_slide.shocking_fact %}shocking-text{% endif %}">{{ current_slide.title }}</h2>
+                {% endif %}
+                <div class="slide-body">{{ current_slide.content|linebreaksbr }}</div>
+                {% if current_slide.slide_type == 'activity' and current_slide.activity_type %}
+                <div class="activity-badge">
+                    <span class="activity-icon">
+                        {% if current_slide.activity_type == 'poll' %}📊
+                        {% elif current_slide.activity_type == 'sort' %}♻️
+                        {% elif current_slide.activity_type == 'guess' %}⏳
+                        {% elif current_slide.activity_type == 'discuss' %}💬
+                        {% elif current_slide.activity_type == 'commit' %}💪
+                        {% elif current_slide.activity_type == 'match' %}🧩
+                        {% elif current_slide.activity_type == 'problem' %}🔍
+                        {% elif current_slide.activity_type == 'case_study' %}📋
+                        {% endif %}
+                    </span>
+                    Activity: {{ current_slide.get_activity_type_display }}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="slide-empty">
+                <div class="empty-icon">🌿</div>
+                <h2>Session Ready</h2>
+                <p>Use the controls below to start presenting</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <aside class="facilitator-sidebar">
+            <div class="controls-section">
+                <h3>Slide Controls</h3>
+                <div class="slide-counter">
+                    Slide <span id="current-index">{{ current_index|add:1 }}</span> / <span id="total-slides">{{ total_slides }}</span>
+                </div>
+                <div class="slide-nav">
+                    <button class="btn btn-nav" id="btn-prev" onclick="navigateSlide('prev')">◀ Prev</button>
+                    <button class="btn btn-nav" id="btn-next" onclick="navigateSlide('next')">Next ▶</button>
+                </div>
+                <div class="progress-dots" id="progress-dots">
+                    {% for slide in slides %}
+                    <button class="dot {% if forloop.counter0 == current_index %}active{% elif slide.slide_type == 'activity' %}activity{% endif %}" data-index="{{ forloop.counter0 }}" onclick="gotoSlide({{ forloop.counter0 }})" title="{{ slide.title }}"></button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="actions-section">
+                <h3>Session Actions</h3>
+                <div class="action-buttons">
+                    {% if session.status == 'waiting' %}
+                    <button class="btn btn-primary btn-full" id="btn-start" onclick="sessionAction('start_session')">▶ Start Session</button>
+                    {% elif session.status == 'active' %}
+                    <button class="btn btn-danger btn-full" id="btn-end" onclick="sessionAction('end_session')">⏹ End Session</button>
+                    {% endif %}
+                    <button class="btn btn-accent btn-full" id="btn-activity" onclick="sessionAction('start_activity')">🏁 Start Activity</button>
+                    <button class="btn btn-secondary btn-full" onclick="sessionAction('stop_activity')">⏹ Stop Activity</button>
+                    <button class="btn btn-outline btn-full" id="btn-leaderboard" onclick="toggleLeaderboard()">🏆 Leaderboard</button>
+                </div>
+            </div>
+
+            <div class="leaderboard-section" id="leaderboard-section" style="display:none;">
+                <h3>🏆 Leaderboard</h3>
+                <div id="leaderboard-list" class="leaderboard-list"></div>
+            </div>
+
+            <div class="qr-section">
+                <h3>Join QR Code</h3>
+                <div class="qr-info">
+                    <p>Participants join at:</p>
+                    <div class="join-url" id="join-url">/session/{{ session.code }}/join/</div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <div class="activity-overlay" id="activity-overlay" style="display:none;">
+        <div class="activity-result-panel">
+            <h3>Live Activity Results</h3>
+            <div id="activity-live-results"></div>
+        </div>
+    </div>
+
+    <script>
+        const SESSION_CODE = '{{ session.code }}';
+        const SLIDES = {{ slides|length }};
+        const CSRF_TOKEN = '{{ csrf_token }}';
+
+        let eventSource = null;
+        let leaderboardVisible = false;
+
+        function connectSSE() {
+            eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.status === 'ended') {
+                    window.location.href = '/session/';
+                }
+            };
+            eventSource.onerror = function() {
+                setTimeout(connectSSE, 3000);
+            };
+        }
+
+        function navigateSlide(direction) {
+            fetch('/session/' + SESSION_CODE + '/action/' + direction + '/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                }
+            });
+        }
+
+        function gotoSlide(index) {
+            fetch('/session/' + SESSION_CODE + '/action/goto/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'index=' + index,
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                }
+            });
+        }
+
+        function sessionAction(action) {
+            fetch('/session/' + SESSION_CODE + '/action/' + action + '/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                }
+            });
+        }
+
+        function toggleLeaderboard() {
+            const section = document.getElementById('leaderboard-section');
+            leaderboardVisible = !leaderboardVisible;
+            section.style.display = leaderboardVisible ? 'block' : 'none';
+            if (leaderboardVisible) loadLeaderboard();
+        }
+
+        function loadLeaderboard() {
+            fetch('/session/' + SESSION_CODE + '/leaderboard/')
+            .then(r => r.json())
+            .then(data => {
+                const list = document.getElementById('leaderboard-list');
+                list.innerHTML = data.leaderboard.map((p, i) => `
+                    <div class="leaderboard-item ${i < 3 ? 'top-' + (i+1) : ''}">
+                        <span class="lb-rank">${i < 3 ? ['🥇','🥈','🥉'][i] : i+1}</span>
+                        <span class="lb-avatar">${p.avatar}</span>
+                        <span class="lb-name">${p.name}</span>
+                        <span class="lb-points">${p.points}pts</span>
+                        ${p.streak >= 3 ? '<span class="lb-streak">🔥' + p.streak + '</span>' : ''}
+                        <span class="lb-badges">${p.badges.join(' ')}</span>
+                    </div>
+                `).join('');
+            });
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                navigateSlide('next');
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                navigateSlide('prev');
+            }
+        });
+
+        setInterval(function() {
+            loadLeaderboard();
+            fetch('/session/' + SESSION_CODE + '/state/')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('participant-count').textContent = data.participant_count + ' participants';
+            });
+        }, 5000);
+
+        connectSSE();
+    </script>
+</body>
+</html>

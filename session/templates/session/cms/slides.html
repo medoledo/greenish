@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ session.title }} Slides - Greenish CMS</title>
+    <link rel="stylesheet" href="/static/css/session.css">
+    <link rel="stylesheet" href="/static/css/cms.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body class="cms-page">
+    <header class="cms-header">
+        <div class="cms-header-left">
+            <img src="/static/img/logo.svg" alt="Greenish" class="cms-logo">
+            <h1>{{ session.title }}</h1>
+            <span class="session-code">{{ session.code }}</span>
+        </div>
+        <div class="cms-header-right">
+            <a href="{% url 'cms_sessions' %}" class="btn btn-outline">← All Sessions</a>
+            <a href="{% url 'session_facilitator' code=session.code %}" class="btn btn-secondary">Facilitator View</a>
+            <a href="{% url 'cms_slide_add' code=session.code %}" class="btn btn-primary">+ Add Slide</a>
+        </div>
+    </header>
+
+    <main class="cms-main">
+        <div class="cms-section-header">
+            <h2>Slides ({{ slides|length }})</h2>
+            <div class="cms-section-hint">Drag to reorder slides</div>
+        </div>
+
+        {% if slides %}
+        <div class="cms-slides-list" id="slides-list">
+            {% for slide in slides %}
+            <div class="cms-slide-item{% if slide.slide_type == 'activity' %} activity-slide{% endif %}{% if slide.shocking_fact %} shocking-slide{% endif %}" data-slide-id="{{ slide.id }}">
+                <div class="slide-handle">☰</div>
+                <div class="slide-info">
+                    <div class="slide-order">#{{ slide.order|add:1 }}</div>
+                    <div class="slide-type-badge {{ slide.slide_type }}-badge">
+                        {% if slide.slide_type == 'activity' %}
+                            {{ slide.get_activity_type_display }}
+                        {% else %}
+                            Info
+                        {% endif %}
+                    </div>
+                    <div class="slide-title">{{ slide.title|default:"Untitled Slide" }}</div>
+                    {% if slide.shocking_fact %}
+                    <span class="shocking-badge">⚡ Shocking Fact</span>
+                    {% endif %}
+                </div>
+                <div class="slide-actions">
+                    <a href="{% url 'cms_slide_edit' code=session.code slide_id=slide.id %}" class="btn btn-outline btn-small">Edit</a>
+                    <a href="{% url 'cms_slide_delete' code=session.code slide_id=slide.id %}" class="btn btn-danger btn-small" onclick="return confirm('Delete this slide?')">Delete</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="cms-empty">
+            <div class="empty-icon">📋</div>
+            <h3>No slides yet</h3>
+            <p>Add your first slide to build your session</p>
+            <a href="{% url 'cms_slide_add' code=session.code %}" class="btn btn-primary">+ Add Slide</a>
+        </div>
+        {% endif %}
+    </main>
+
+    <script>
+        const CSRF_TOKEN = '{{ csrf_token }}';
+        const SESSION_CODE = '{{ session.code }}';
+
+        new Sortable(document.getElementById('slides-list'), {
+            animation: 150,
+            handle: '.slide-handle',
+            ghostClass: 'sortable-ghost',
+            onEnd: function(evt) {
+                const order = [];
+                document.querySelectorAll('.cms-slide-item').forEach(item => {
+                    order.push(parseInt(item.dataset.slideId));
+                });
+                fetch('/session/cms/' + SESSION_CODE + '/slides/reorder/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': CSRF_TOKEN,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({order: order}),
+                });
+            }
+        });
+    </script>
+</body>
+</html>
