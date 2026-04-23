@@ -456,7 +456,10 @@
         }
 
         let facDecomposeAnswers = {};
+        let selectedDecomposeItem = null;
+
         function initFacDecomposeDrag() {
+            // Desktop drag and drop
             document.querySelectorAll('.decompose-item').forEach(item => {
                 item.addEventListener('dragstart', e => {
                     e.dataTransfer.setData('text/plain', item.dataset.idx);
@@ -472,36 +475,73 @@
                     slot.classList.remove('slot-over');
                     const idx = e.dataTransfer.getData('text/plain');
                     const slotIdx = slot.dataset.slot;
+                    moveFacDecomposeItem(idx, slotIdx);
+                });
+            });
 
-                    // If this slot already has an item, move it back to items pool
-                    const slotContent = document.getElementById('slot-content-' + slotIdx);
-                    if (slotContent && slotContent.firstChild) {
-                        const existingItem = slotContent.firstChild;
-                        const existingIdx = existingItem.dataset.idx;
-                        if (existingIdx !== undefined && existingIdx !== idx) {
-                            delete facDecomposeAnswers[existingIdx];
-                            existingItem.remove();
-                            const itemsContainer = document.getElementById('decompose-items');
-                            if (itemsContainer) {
-                                itemsContainer.appendChild(existingItem);
-                                existingItem.style.opacity = '1';
-                            }
-                        }
+            // Mobile: tap to select, tap slot to drop
+            document.querySelectorAll('.decompose-item').forEach(item => {
+                item.addEventListener('touchstart', e => {
+                    e.preventDefault();
+                    document.querySelectorAll('.decompose-item').forEach(i => { i.classList.remove('selected-mobile'); i.style.transform = ''; });
+                    selectedDecomposeItem = item.dataset.idx;
+                    item.classList.add('selected-mobile');
+                    item.style.transform = 'scale(1.1)';
+                });
+                item.addEventListener('click', e => {
+                    document.querySelectorAll('.decompose-item').forEach(i => { i.classList.remove('selected-mobile'); i.style.transform = ''; });
+                    selectedDecomposeItem = item.dataset.idx;
+                    item.classList.add('selected-mobile');
+                    item.style.transform = 'scale(1.1)';
+                });
+            });
+            document.querySelectorAll('.decompose-slot').forEach(slot => {
+                slot.addEventListener('touchstart', e => {
+                    if (selectedDecomposeItem !== null) {
+                        e.preventDefault();
+                        moveFacDecomposeItem(selectedDecomposeItem, slot.dataset.slot);
+                        selectedDecomposeItem = null;
                     }
-
-                    facDecomposeAnswers[idx] = slotIdx;
-                    const dragItem = document.querySelector('[data-idx="' + idx + '"]');
-                    if (dragItem) {
-                        dragItem.remove();
-                        const targetSlot = document.getElementById('slot-content-' + slotIdx);
-                        if (targetSlot) {
-                            targetSlot.innerHTML = '';
-                            targetSlot.appendChild(dragItem);
-                            dragItem.style.opacity = '0.9';
-                        }
+                });
+                slot.addEventListener('click', e => {
+                    if (selectedDecomposeItem !== null) {
+                        moveFacDecomposeItem(selectedDecomposeItem, slot.dataset.slot);
+                        selectedDecomposeItem = null;
                     }
                 });
             });
+        }
+
+        function moveFacDecomposeItem(idx, slotIdx) {
+            const slotContent = document.getElementById('slot-content-' + slotIdx);
+            if (slotContent && slotContent.firstChild) {
+                const existingItem = slotContent.firstChild;
+                const existingIdx = existingItem.dataset.idx;
+                if (existingIdx !== undefined && existingIdx !== idx) {
+                    delete facDecomposeAnswers[existingIdx];
+                    existingItem.remove();
+                    const itemsContainer = document.getElementById('decompose-items');
+                    if (itemsContainer) {
+                        itemsContainer.appendChild(existingItem);
+                        existingItem.style.opacity = '1';
+                        existingItem.classList.remove('selected-mobile');
+                        existingItem.style.transform = '';
+                    }
+                }
+            }
+            facDecomposeAnswers[idx] = slotIdx;
+            const dragItem = document.querySelector('[data-idx="' + idx + '"]');
+            if (dragItem) {
+                dragItem.remove();
+                const targetSlot = document.getElementById('slot-content-' + slotIdx);
+                if (targetSlot) {
+                    targetSlot.innerHTML = '';
+                    targetSlot.appendChild(dragItem);
+                    dragItem.style.opacity = '0.9';
+                    dragItem.classList.remove('selected-mobile');
+                    dragItem.style.transform = '';
+                }
+            }
         }
 
         function renderFacQuiz(titleEl, contentEl, config) {
@@ -568,8 +608,73 @@
                 if (data.success) {
                     const btn = document.getElementById('btn-show-answers');
                     if (btn) { btn.textContent = '✅ Answers Shown'; btn.disabled = true; }
+                    renderCorrectAnswersLocally();
                 }
             });
+        }
+
+        function renderCorrectAnswersLocally() {
+            const contentEl = document.getElementById('fac-activity-content');
+            if (!contentEl) return;
+            const template = currentSlideData ? (currentSlideData.activity_config && currentSlideData.activity_config.template ? currentSlideData.activity_config.template : currentSlideData.activity_type) : '';
+
+            if (template === 'sort_stats') {
+                const data = ACTIVITIES.sort_stats;
+                const statements = (currentSlideData.activity_config && currentSlideData.activity_config.statements) ? currentSlideData.activity_config.statements : data.statements;
+                let html = '<div style="background:rgba(0,0,0,0.6);border:2px solid #52B788;border-radius:12px;padding:16px;margin-bottom:12px;">';
+                html += '<h4 style="color:#52B788;margin-bottom:12px;font-size:18px;">📋 Correct Answers</h4>';
+                html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+                statements.forEach((s, i) => {
+                    html += '<div style="padding:10px 14px;border-radius:8px;background:rgba(82,183,136,0.15);border:1px solid #52B788;">';
+                    html += '<div style="font-weight:700;color:#fff;font-size:14px;">' + (i+1) + '. ' + s.text + '</div>';
+                    html += '<div style="color:#52B788;font-weight:800;font-size:16px;margin-top:4px;">' + (s.answer ? '✅ True' : '❌ False') + '</div>';
+                    if (s.fact) html += '<div style="font-size:12px;color:#FFD4D4;margin-top:4px;">💡 ' + s.fact + '</div>';
+                    html += '</div>';
+                });
+                html += '</div></div>';
+                contentEl.insertAdjacentHTML('beforeend', html);
+            } else if (template === 'quiz') {
+                const data = ACTIVITIES.quiz;
+                const questions = (currentSlideData.activity_config && currentSlideData.activity_config.questions) ? currentSlideData.activity_config.questions : data.questions;
+                let html = '<div style="background:rgba(0,0,0,0.6);border:2px solid #52B788;border-radius:12px;padding:16px;margin-bottom:12px;">';
+                html += '<h4 style="color:#52B788;margin-bottom:12px;font-size:18px;">📋 Correct Answers</h4>';
+                html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+                questions.forEach((q, i) => {
+                    html += '<div style="padding:10px 14px;border-radius:8px;background:rgba(82,183,136,0.15);border:1px solid #52B788;">';
+                    html += '<div style="font-size:13px;margin-bottom:4px;color:#fff;">Q' + (i+1) + ': ' + q.q + '</div>';
+                    html += '<div style="font-weight:700;color:#52B788;">✅ ' + q.options[q.correct] + '</div>';
+                    html += '</div>';
+                });
+                html += '</div></div>';
+                contentEl.insertAdjacentHTML('beforeend', html);
+            } else if (template === 'sprint') {
+                const data = ACTIVITIES.sprint;
+                let html = '<div style="background:rgba(0,0,0,0.6);border:2px solid #52B788;border-radius:12px;padding:16px;margin-bottom:12px;">';
+                html += '<h4 style="color:#52B788;margin-bottom:12px;font-size:18px;">📋 Correct Answers</h4>';
+                html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+                data.items.forEach(item => {
+                    const bin = data.bins.find(b => b.id === item.bin);
+                    html += '<div style="padding:10px 14px;border-radius:8px;background:rgba(82,183,136,0.15);border:1px solid #52B788;">';
+                    html += '<span style="color:#fff;font-weight:600;">' + item.emoji + ' ' + item.name + '</span>';
+                    html += '<span style="float:right;color:#52B788;font-weight:700;">' + (bin ? bin.name : item.bin) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div></div>';
+                contentEl.insertAdjacentHTML('beforeend', html);
+            } else if (template === 'decompose') {
+                const data = ACTIVITIES.decompose;
+                let html = '<div style="background:rgba(0,0,0,0.6);border:2px solid #52B788;border-radius:12px;padding:16px;margin-bottom:12px;">';
+                html += '<h4 style="color:#52B788;margin-bottom:12px;font-size:18px;">📋 Correct Answers</h4>';
+                html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+                data.items.forEach(item => {
+                    html += '<div style="padding:10px 14px;border-radius:8px;background:rgba(82,183,136,0.15);border:1px solid #52B788;">';
+                    html += '<span style="color:#fff;font-weight:600;">' + item.emoji + ' ' + item.name + '</span>';
+                    html += '<span style="float:right;color:#52B788;font-weight:700;">' + data.timeline[item.slot] + '</span>';
+                    html += '</div>';
+                });
+                html += '</div></div>';
+                contentEl.insertAdjacentHTML('beforeend', html);
+            }
         }
 
         function refreshLiveStats() {

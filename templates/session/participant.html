@@ -343,7 +343,10 @@
     }
 
     let sprintAnswers = {};
+    let selectedSprintItem = null;
+
     function initSprintDrag() {
+        // Desktop: HTML5 drag and drop
         document.querySelectorAll('.sort-game-item').forEach(item => {
             item.addEventListener('dragstart', e => {
                 e.dataTransfer.setData('text/plain', item.dataset.item);
@@ -361,24 +364,70 @@
                 zone.closest('.sort-game-bin').classList.remove('bin-over');
                 const idx = e.dataTransfer.getData('text/plain');
                 const bin = zone.dataset.bin;
-                sprintAnswers[idx] = bin;
-
-                const dragItem = document.querySelector('[data-item="' + idx + '"]');
-                if (dragItem) {
-                    // Remove from old location
-                    dragItem.remove();
-                    // Add to new bin
-                    zone.appendChild(dragItem);
-                    dragItem.style.opacity = '0.9';
-                    dragItem.style.cursor = 'grab';
-                }
+                moveSprintItem(idx, bin, zone);
             });
         });
-        // Make bins themselves drop targets for re-dragging
         document.querySelectorAll('.sort-game-bin').forEach(bin => {
             bin.addEventListener('dragover', e => { e.preventDefault(); bin.classList.add('bin-over'); });
             bin.addEventListener('dragleave', e => { bin.classList.remove('bin-over'); });
         });
+
+        // Mobile: tap-to-select, tap-bin-to-drop
+        document.querySelectorAll('.sort-game-item').forEach(item => {
+            item.addEventListener('touchstart', e => {
+                e.preventDefault();
+                // Deselect others
+                document.querySelectorAll('.sort-game-item').forEach(i => {
+                    i.classList.remove('selected-mobile');
+                    i.style.transform = '';
+                });
+                selectedSprintItem = item.dataset.item;
+                item.classList.add('selected-mobile');
+                item.style.transform = 'scale(1.1)';
+            });
+            item.addEventListener('click', e => {
+                // Also support click for accessibility
+                document.querySelectorAll('.sort-game-item').forEach(i => {
+                    i.classList.remove('selected-mobile');
+                    i.style.transform = '';
+                });
+                selectedSprintItem = item.dataset.item;
+                item.classList.add('selected-mobile');
+                item.style.transform = 'scale(1.1)';
+            });
+        });
+        document.querySelectorAll('.sort-game-bin').forEach(bin => {
+            bin.addEventListener('touchstart', e => {
+                if (selectedSprintItem !== null) {
+                    e.preventDefault();
+                    const binId = bin.dataset.bin;
+                    const zone = bin.querySelector('.bin-dropzone');
+                    moveSprintItem(selectedSprintItem, binId, zone);
+                    selectedSprintItem = null;
+                }
+            });
+            bin.addEventListener('click', e => {
+                if (selectedSprintItem !== null) {
+                    const binId = bin.dataset.bin;
+                    const zone = bin.querySelector('.bin-dropzone');
+                    moveSprintItem(selectedSprintItem, binId, zone);
+                    selectedSprintItem = null;
+                }
+            });
+        });
+    }
+
+    function moveSprintItem(idx, bin, zone) {
+        sprintAnswers[idx] = bin;
+        const dragItem = document.querySelector('[data-item="' + idx + '"]');
+        if (dragItem) {
+            dragItem.remove();
+            zone.appendChild(dragItem);
+            dragItem.style.opacity = '0.9';
+            dragItem.style.cursor = 'grab';
+            dragItem.classList.remove('selected-mobile');
+            dragItem.style.transform = '';
+        }
     }
 
     function submitSprint() {
