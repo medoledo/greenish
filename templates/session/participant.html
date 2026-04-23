@@ -405,28 +405,32 @@
             bin.addEventListener('dragleave', e => { bin.classList.remove('bin-over'); });
         });
 
-        // Mobile: tap-to-select, tap-bin-to-drop
+        // Allow dragging back to items pool (desktop)
+        const itemsPool = document.getElementById('sprint-items');
+        if (itemsPool) {
+            itemsPool.addEventListener('dragover', e => { e.preventDefault(); });
+            itemsPool.addEventListener('drop', e => {
+                e.preventDefault();
+                const idx = e.dataTransfer.getData('text/plain');
+                const dragItem = document.querySelector('[data-item="' + idx + '"]');
+                if (dragItem && dragItem.parentElement && dragItem.parentElement.classList.contains('bin-dropzone')) {
+                    delete sprintAnswers[idx];
+                    itemsPool.appendChild(dragItem);
+                    dragItem.style.opacity = '1';
+                    dragItem.classList.remove('selected-mobile');
+                    dragItem.style.transform = '';
+                }
+            });
+        }
+
+        // Mobile: tap-to-select, tap-bin-to-drop, tap-item-in-bin to move back
         document.querySelectorAll('.sort-game-item').forEach(item => {
             item.addEventListener('touchstart', e => {
                 e.preventDefault();
-                // Deselect others
-                document.querySelectorAll('.sort-game-item').forEach(i => {
-                    i.classList.remove('selected-mobile');
-                    i.style.transform = '';
-                });
-                selectedSprintItem = item.dataset.item;
-                item.classList.add('selected-mobile');
-                item.style.transform = 'scale(1.1)';
+                handleSprintItemTap(item);
             });
             item.addEventListener('click', e => {
-                // Also support click for accessibility
-                document.querySelectorAll('.sort-game-item').forEach(i => {
-                    i.classList.remove('selected-mobile');
-                    i.style.transform = '';
-                });
-                selectedSprintItem = item.dataset.item;
-                item.classList.add('selected-mobile');
-                item.style.transform = 'scale(1.1)';
+                handleSprintItemTap(item);
             });
         });
         document.querySelectorAll('.sort-game-bin').forEach(bin => {
@@ -448,6 +452,32 @@
                 }
             });
         });
+    }
+
+    function handleSprintItemTap(item) {
+        // If item is already inside a bin, move it back to items pool
+        if (item.parentElement && item.parentElement.classList.contains('bin-dropzone')) {
+            const idx = item.dataset.item;
+            delete sprintAnswers[idx];
+            item.remove();
+            const itemsContainer = document.getElementById('sprint-items');
+            if (itemsContainer) {
+                itemsContainer.appendChild(item);
+                item.style.opacity = '1';
+                item.classList.remove('selected-mobile');
+                item.style.transform = '';
+            }
+            selectedSprintItem = null;
+            return;
+        }
+        // Otherwise select it
+        document.querySelectorAll('.sort-game-item').forEach(i => {
+            i.classList.remove('selected-mobile');
+            i.style.transform = '';
+        });
+        selectedSprintItem = item.dataset.item;
+        item.classList.add('selected-mobile');
+        item.style.transform = 'scale(1.1)';
     }
 
     function moveSprintItem(idx, bin, zone) {
@@ -494,7 +524,10 @@
     }
 
     let decomposeAnswers = {};
+    let selectedDecomposeItem = null;
+
     function initDecomposeDrag() {
+        // Desktop: HTML5 drag and drop
         document.querySelectorAll('.decompose-item').forEach(item => {
             item.addEventListener('dragstart', e => {
                 e.dataTransfer.setData('text/plain', item.dataset.idx);
@@ -512,39 +545,95 @@
                 slot.classList.remove('slot-over');
                 const idx = e.dataTransfer.getData('text/plain');
                 const slotIdx = slot.dataset.slot;
+                moveDecomposeItem(idx, slotIdx);
+            });
+        });
 
-                // If this slot already has an item, move it back to items pool
-                const slotContent = document.getElementById('slot-content-' + slotIdx);
-                if (slotContent && slotContent.firstChild) {
-                    const existingItem = slotContent.firstChild;
-                    // Clear the old answer for the existing item
-                    const existingIdx = existingItem.dataset.idx;
-                    if (existingIdx !== undefined && existingIdx !== idx) {
-                        delete decomposeAnswers[existingIdx];
-                        existingItem.remove();
-                        const itemsContainer = document.getElementById('decompose-items');
-                        if (itemsContainer) {
-                            itemsContainer.appendChild(existingItem);
-                            existingItem.style.opacity = '1';
-                        }
-                    }
+        // Mobile: tap-to-select, tap-slot-to-drop, tap-item-in-slot to move back
+        document.querySelectorAll('.decompose-item').forEach(item => {
+            item.addEventListener('touchstart', e => {
+                e.preventDefault();
+                handleDecomposeItemTap(item);
+            });
+            item.addEventListener('click', e => {
+                handleDecomposeItemTap(item);
+            });
+        });
+        document.querySelectorAll('.decompose-slot').forEach(slot => {
+            slot.addEventListener('touchstart', e => {
+                if (selectedDecomposeItem !== null) {
+                    e.preventDefault();
+                    moveDecomposeItem(selectedDecomposeItem, slot.dataset.slot);
+                    selectedDecomposeItem = null;
                 }
-
-                decomposeAnswers[idx] = slotIdx;
-
-                const dragItem = document.querySelector('[data-idx="' + idx + '"]');
-                if (dragItem) {
-                    dragItem.remove();
-                    const targetSlot = document.getElementById('slot-content-' + slotIdx);
-                    if (targetSlot) {
-                        targetSlot.innerHTML = '';
-                        targetSlot.appendChild(dragItem);
-                        dragItem.style.opacity = '0.9';
-                        dragItem.style.cursor = 'grab';
-                    }
+            });
+            slot.addEventListener('click', e => {
+                if (selectedDecomposeItem !== null) {
+                    moveDecomposeItem(selectedDecomposeItem, slot.dataset.slot);
+                    selectedDecomposeItem = null;
                 }
             });
         });
+    }
+
+    function handleDecomposeItemTap(item) {
+        // If item is already inside a slot, move it back to items pool
+        if (item.parentElement && item.parentElement.id && item.parentElement.id.startsWith('slot-content-')) {
+            const idx = item.dataset.idx;
+            delete decomposeAnswers[idx];
+            item.remove();
+            const itemsContainer = document.getElementById('decompose-items');
+            if (itemsContainer) {
+                itemsContainer.appendChild(item);
+                item.style.opacity = '1';
+                item.classList.remove('selected-mobile');
+                item.style.transform = '';
+            }
+            selectedDecomposeItem = null;
+            return;
+        }
+        // Otherwise select it
+        document.querySelectorAll('.decompose-item').forEach(i => {
+            i.classList.remove('selected-mobile');
+            i.style.transform = '';
+        });
+        selectedDecomposeItem = item.dataset.idx;
+        item.classList.add('selected-mobile');
+        item.style.transform = 'scale(1.1)';
+    }
+
+    function moveDecomposeItem(idx, slotIdx) {
+        // If this slot already has an item, move it back to items pool
+        const slotContent = document.getElementById('slot-content-' + slotIdx);
+        if (slotContent && slotContent.firstChild) {
+            const existingItem = slotContent.firstChild;
+            const existingIdx = existingItem.dataset.idx;
+            if (existingIdx !== undefined && existingIdx !== idx) {
+                delete decomposeAnswers[existingIdx];
+                existingItem.remove();
+                const itemsContainer = document.getElementById('decompose-items');
+                if (itemsContainer) {
+                    itemsContainer.appendChild(existingItem);
+                    existingItem.style.opacity = '1';
+                    existingItem.classList.remove('selected-mobile');
+                    existingItem.style.transform = '';
+                }
+            }
+        }
+        decomposeAnswers[idx] = slotIdx;
+        const dragItem = document.querySelector('[data-idx="' + idx + '"]');
+        if (dragItem) {
+            dragItem.remove();
+            const targetSlot = document.getElementById('slot-content-' + slotIdx);
+            if (targetSlot) {
+                targetSlot.innerHTML = '';
+                targetSlot.appendChild(dragItem);
+                dragItem.style.opacity = '0.9';
+                dragItem.style.cursor = 'grab';
+                dragItem.classList.remove('selected-mobile');
+                dragItem.style.transform = '';
+            }
+        }
     }
 
     function submitDecompose() {

@@ -359,7 +359,11 @@
             const titleEl = document.getElementById('fac-activity-title');
             const contentEl = document.getElementById('fac-activity-content');
             const showBtn = document.getElementById('btn-show-answers');
+            const panel = document.getElementById('fac-activity-panel');
+            const badge = document.getElementById('activity-badge');
             if (!titleEl || !contentEl) return;
+            if (panel) panel.style.display = 'block';
+            if (badge) badge.style.display = 'inline-flex';
 
             // Show "Show Answers" button for games with correct answers
             if (['sprint','decompose','quiz','sort_stats'].includes(template)) {

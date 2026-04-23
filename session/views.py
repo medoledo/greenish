@@ -232,7 +232,8 @@ def sse_stream(request, code):
                 yield f"event: participant_change\ndata: {data}\n\n"
                 last_participant_count = current_participant_count
 
-            time.sleep(1)
+            yield ": hb\n\n"
+            time.sleep(0.3)
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
@@ -249,21 +250,25 @@ def facilitator_action(request, code, action):
         if session.current_slide_index < total_slides - 1:
             session.current_slide_index += 1
             session.save()
+            cache.delete(f'show_answers_{code}')
     elif action == 'prev':
         if session.current_slide_index > 0:
             session.current_slide_index -= 1
             session.save()
+            cache.delete(f'show_answers_{code}')
     elif action == 'goto':
         index = int(request.POST.get('index', 0))
         if 0 <= index < total_slides:
             session.current_slide_index = index
             session.save()
+            cache.delete(f'show_answers_{code}')
     elif action == 'start_activity':
         session.activity_active = True
         session.save()
     elif action == 'stop_activity':
         session.activity_active = False
         session.save()
+        cache.delete(f'show_answers_{code}')
     elif action == 'end_session':
         session.status = 'ended'
         session.activity_active = False
@@ -279,6 +284,7 @@ def facilitator_action(request, code, action):
         ActivityResult.objects.filter(session=session).delete()
         AnonymousPost.objects.filter(session=session).delete()
         session.participants.all().delete()
+        cache.delete(f'show_answers_{code}')
     elif action == 'show_answers':
         cache.set(f'show_answers_{code}', time.time(), timeout=300)
 
