@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>{{ session.title }} - Greenish</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=8">
+    <link rel="stylesheet" href="/static/css/session.css?v=9">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="participant-page">
@@ -106,7 +109,7 @@
     const SESSION_CODE = '{{ session.code }}';
     const PARTICIPANT_ID = {{ participant.id }};
     const CSRF_TOKEN = '{{ csrf_token }}';
-    const CURRENT_SLIDE_ID = {% if current_slide %}{{ current_slide.id }}{% else %}0{% endif %};
+    let CURRENT_SLIDE_ID = {% if current_slide %}{{ current_slide.id }}{% else %}0{% endif %};
     let CURRENT_INDEX = {{ current_index }};
     const TOTAL_SLIDES = {{ slides|length }};
     let CURRENT_SLIDE_TYPE = '{{ current_slide.slide_type|default_if_none:"" }}';
@@ -180,6 +183,7 @@
     let activitySubmitted = false;
     let eventSource = null;
     let myAnswers = {};
+    let postsIntervalId = null;
 
     // floating background particles
     (function(){
@@ -200,7 +204,7 @@
 
     // SSE — named events
     function connectSSE() {
-        eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
+        eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/?v=' + Date.now());
         eventSource.addEventListener('slide_change', function(e) {
             const data = JSON.parse(e.data);
             updateSlideDisplay(data);
@@ -213,8 +217,11 @@
         eventSource.addEventListener('session_status', function(e) {
             const data = JSON.parse(e.data);
             if (data.status === 'ended') {
-                window.location.href = '/session/';
+                window.location.href = '/session/' + SESSION_CODE + '/join/';
             }
+        });
+        eventSource.addEventListener('session_ended', function(e) {
+            window.location.href = '/session/' + SESSION_CODE + '/join/';
         });
         eventSource.addEventListener('show_answers', function(e) {
             const data = JSON.parse(e.data);
@@ -223,6 +230,13 @@
         eventSource.onerror = function() {
             setTimeout(connectSSE, 3000);
         };
+    }
+
+    function clearPostsInterval() {
+        if (postsIntervalId) {
+            clearInterval(postsIntervalId);
+            postsIntervalId = null;
+        }
     }
 
     function updateSlideDisplay(data) {
@@ -245,13 +259,16 @@
             return;
         }
 
+        CURRENT_SLIDE_ID = slide.id;
         CURRENT_SLIDE_TYPE = slide.slide_type;
         CURRENT_ACTIVITY_TYPE = slide.activity_type || '';
         ACTIVITY_CONFIG = slide.activity_config;
         activitySubmitted = false;
+        clearPostsInterval();
         myAnswers = {};
         document.getElementById('submitted-indicator').style.display = 'none';
-        document.getElementById('answers-reveal').style.display = 'none';
+        const revealEl = document.getElementById('answers-reveal');
+        if (revealEl) revealEl.style.display = 'none';
 
         // Update shocking class
         if (slide.shocking_fact) card.classList.add('shocking');
@@ -282,6 +299,8 @@
 
         if (shouldShow && !activitySubmitted) {
             renderActivity(CURRENT_ACTIVITY_TYPE, ACTIVITY_CONFIG);
+        } else if (!shouldShow) {
+            clearPostsInterval();
         }
     }
 
@@ -370,8 +389,7 @@
         });
         const isCorrect = correct === total;
         showResult(isCorrect, correct + '/' + total, isCorrect ? 10 : (correct > 0 ? 5 : 0));
-        submitActivity('sprint', { answer: JSON.stringify(sprintAnswers), is_correct: isCorrect });
-        myAnswers = sprintAnswers;
+        submitActivity('sprint', { answer: JSON.stringify(sprintAnswers), is_correct: isCorrect, points_earned: isCorrect ? 10 : (correct > 0 ? 5 : 0) });
     }
 
     function renderDecompose(titleEl, contentEl) {
@@ -432,11 +450,12 @@
         const data = ACTIVITIES.decompose;
         let correct = 0;
         data.items.forEach((item, i) => {
-            if (decomposeAnswers[String(i)] == item.slot) correct++;
+            if (decomposeAnswers[String(i)] == String(item.slot)) correct++;
         });
         const isCorrect = correct === data.items.length;
-        showResult(isCorrect, correct + '/' + data.items.length, isCorrect ? 10 : (correct > 0 ? 5 : 0));
-        submitActivity('decompose', { answer: JSON.stringify(decomposeAnswers), is_correct: isCorrect });
+        const points = isCorrect ? 10 : (correct > 0 ? 5 : 0);
+        showResult(isCorrect, correct + '/' + data.items.length, points);
+        submitActivity('decompose', { answer: JSON.stringify(decomposeAnswers), is_correct: isCorrect, points_earned: points });
         myAnswers = decomposeAnswers;
     }
 
@@ -492,7 +511,7 @@
                 const pct = Math.round((quizState.score / (questions.length * 10)) * 100);
                 const finalCorrect = pct >= 60;
                 showResult(finalCorrect, quizState.score + ' pts (' + pct + '%)', quizState.score);
-                submitActivity('quiz', { answer: JSON.stringify(quizState.answers), is_correct: finalCorrect });
+                submitActivity('quiz', { answer: JSON.stringify(quizState.answers), is_correct: finalCorrect, points_earned: quizState.score });
             }
         }, 800);
     }
@@ -501,8 +520,9 @@
         const data = ACTIVITIES.commitment;
         titleEl.textContent = data.title;
         contentEl.innerHTML = '<div class="commit-wall" id="commit-wall-player"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-fancy" placeholder="' + data.placeholder + '" maxlength="280"></textarea><button class="btn btn-accent" id="commit-btn" onclick="submitCommitment()">💚 Commit</button></div>';
+        clearPostsInterval();
         loadPosts();
-        setInterval(loadPosts, 3000);
+        postsIntervalId = setInterval(loadPosts, 3000);
     }
     function submitCommitment() {
         if (activitySubmitted) return;
@@ -577,7 +597,7 @@
                 const pct = Math.round((statsState.score / (statements.length * 10)) * 100);
                 const finalCorrect = pct >= 60;
                 showResult(finalCorrect, statsState.score + ' pts', statsState.score);
-                submitActivity('sort_stats', { answer: JSON.stringify({score: statsState.score, total: statements.length}), is_correct: finalCorrect });
+                submitActivity('sort_stats', { answer: JSON.stringify({score: statsState.score, total: statements.length}), is_correct: finalCorrect, points_earned: statsState.score });
             }
         }, 1200);
     }
@@ -611,7 +631,9 @@
     function renderLegacyDiscuss(config, titleEl, contentEl) {
         titleEl.textContent = config.prompt || 'Share your thoughts';
         contentEl.innerHTML = '<div class="discuss-wall-player commit-wall" id="discuss-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="discuss-input-p" placeholder="Share your thoughts..." maxlength="' + (config.max_chars || 280) + '"></textarea><button class="btn btn-primary" id="discuss-btn" onclick="submitLegacyDiscuss()">Post</button></div>';
-        loadPosts(); setInterval(loadPosts, 3000);
+        clearPostsInterval();
+        loadPosts();
+        postsIntervalId = setInterval(loadPosts, 3000);
     }
     function submitLegacyDiscuss() {
         const input = document.getElementById('discuss-input-p');
@@ -627,7 +649,9 @@
     function renderLegacyCommit(config, titleEl, contentEl) {
         titleEl.textContent = config.prompt || 'I will...';
         contentEl.innerHTML = '<div class="commit-wall commit-wall-player" id="commit-wall-p"></div><div class="act-input-area"><textarea class="act-input" id="commit-input-p" placeholder="I will..." maxlength="280"></textarea><button class="btn btn-accent" id="commit-legacy-btn" onclick="submitLegacyCommit()">💚 Commit</button></div>';
-        loadPosts(); setInterval(loadPosts, 3000);
+        clearPostsInterval();
+        loadPosts();
+        postsIntervalId = setInterval(loadPosts, 3000);
     }
     function submitLegacyCommit() {
         const input = document.getElementById('commit-input-p');
@@ -712,10 +736,15 @@
     const badgeNames = {
         '🌱': {name: 'First Bloom', desc: 'First correct answer!'},
         '🔥': {name: 'On Fire', desc: '3 correct in a row!'},
-        '♻️': {name: 'Sorting Pro', desc: '5 correct answers!'},
+        '🏆': {name: 'Sorting Pro', desc: '5 correct answers!'},
         '🌊': {name: 'Wave Maker', desc: 'Joined the discussion!'},
         '💪': {name: 'Commitment Keeper', desc: 'Made a commitment!'},
-        '🏆': {name: 'Session Star', desc: 'Top 3 overall!'},
+        '♻️': {name: 'Sorting Star', desc: 'Completed waste sorting sprint!'},
+        '⏳': {name: 'Time Keeper', desc: 'Mastered decomposition times!'},
+        '🌍': {name: 'Planet Protector', desc: 'Aced the plastic quiz!'},
+        '📊': {name: 'Fact Checker', desc: 'Sorted the stats like a pro!'},
+        '💚': {name: 'Green Warrior', desc: 'Made a green commitment!'},
+        '💬': {name: 'Community Voice', desc: 'Shared in community discussion!'},
     };
 
     function showBadgeNotification(icon) {
@@ -733,7 +762,8 @@
         if (!revealEl) return;
         revealEl.style.display = 'block';
 
-        let html = '<h4 style="color:#52B788;margin-bottom:12px;">📋 Correct Answers</h4>';
+        let html = '<div style="background:rgba(0,0,0,0.85);border:2px solid #52B788;border-radius:12px;padding:16px;">';
+        html += '<h4 style="color:#52B788;margin-bottom:12px;font-size:18px;">📋 Correct Answers</h4>';
 
         if (CURRENT_ACTIVITY_TYPE === 'sprint' || CURRENT_ACTIVITY_TYPE === 'decompose') {
             html += '<div style="display:flex;flex-direction:column;gap:8px;">';
@@ -748,9 +778,9 @@
                     correctLabel = activityData.timeline[item.slot];
                 }
                 const isCorrect = userAns === (CURRENT_ACTIVITY_TYPE === 'sprint' ? item.bin : String(item.slot));
-                html += '<div style="padding:8px 12px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.2)' : 'rgba(231,111,81,0.2)') + ';border:1px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
-                html += '<span>' + item.emoji + ' ' + item.name + '</span>';
-                html += '<span style="float:right;font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + correctLabel + '</span>';
+                html += '<div style="padding:10px 14px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.25)' : 'rgba(231,111,81,0.25)') + ';border:2px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
+                html += '<span style="color:#fff;font-weight:600;">' + item.emoji + ' ' + item.name + '</span>';
+                html += '<span style="float:right;color:#fff;font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + correctLabel + '</span>';
                 html += '</div>';
             });
             html += '</div>';
@@ -760,9 +790,9 @@
             questions.forEach((q, i) => {
                 const userAns = myAnswers['q' + i];
                 const isCorrect = userAns === q.correct;
-                html += '<div style="padding:8px 12px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.2)' : 'rgba(231,111,81,0.2)') + ';border:1px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
-                html += '<div style="font-size:13px;margin-bottom:4px;">Q' + (i+1) + ': ' + q.q + '</div>';
-                html += '<div style="font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + 'Correct: ' + q.options[q.correct] + '</div>';
+                html += '<div style="padding:10px 14px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.25)' : 'rgba(231,111,81,0.25)') + ';border:2px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
+                html += '<div style="font-size:13px;margin-bottom:4px;color:#fff;">Q' + (i+1) + ': ' + q.q + '</div>';
+                html += '<div style="font-weight:700;color:#fff;">' + (isCorrect ? '✅ ' : '❌ ') + 'Correct: ' + q.options[q.correct] + '</div>';
                 html += '</div>';
             });
             html += '</div>';
@@ -772,17 +802,32 @@
             statements.forEach((s, i) => {
                 const userAns = myAnswers['q' + i];
                 const isCorrect = userAns === s.answer;
-                html += '<div style="padding:8px 12px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.2)' : 'rgba(231,111,81,0.2)') + ';border:1px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
-                html += '<div style="font-size:13px;margin-bottom:4px;">' + s.text + '</div>';
-                html += '<div style="font-weight:700;">' + (isCorrect ? '✅ ' : '❌ ') + 'Correct: ' + (s.answer ? 'True' : 'False') + '</div>';
+                html += '<div style="padding:10px 14px;border-radius:8px;background:' + (isCorrect ? 'rgba(82,183,136,0.25)' : 'rgba(231,111,81,0.25)') + ';border:2px solid ' + (isCorrect ? '#52B788' : '#E76F51') + '">';
+                html += '<div style="font-size:13px;margin-bottom:4px;color:#fff;">' + s.text + '</div>';
+                html += '<div style="font-weight:700;color:#fff;">' + (isCorrect ? '✅ ' : '❌ ') + 'Correct: ' + (s.answer ? 'True' : 'False') + '</div>';
                 if (s.fact && !isCorrect) html += '<div style="font-size:12px;color:#FFD4D4;margin-top:4px;">💡 ' + s.fact + '</div>';
                 html += '</div>';
             });
             html += '</div>';
         }
 
+        html += '</div>';
         revealEl.innerHTML = html;
     }
+
+    // Heartbeat — check if still in session (handles kicks)
+    function checkStillInSession() {
+        fetch('/session/' + SESSION_CODE + '/check/')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.valid || data.status === 'ended') {
+                window.location.href = '/session/' + SESSION_CODE + '/join/';
+            }
+        })
+        .catch(() => {});
+    }
+    setInterval(checkStillInSession, 5000);
+    checkStillInSession();
 
     connectSSE();
     </script>

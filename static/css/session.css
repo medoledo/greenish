@@ -306,9 +306,9 @@ body {
 .p-slide-image { max-width: 100%; border-radius: var(--radius); margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
 
 .p-slide-card.shocking {
-    background: linear-gradient(135deg, rgba(231,111,81,0.85), rgba(214,96,74,0.85));
-    border-color: var(--coral);
-    box-shadow: 0 0 40px rgba(231,111,81,0.4), inset 0 0 40px rgba(231,111,81,0.1);
+    background: linear-gradient(135deg, rgba(231,111,81,0.2), rgba(180,60,40,0.15)) !important;
+    border-color: rgba(231,111,81,0.5) !important;
+    box-shadow: 0 0 40px rgba(231,111,81,0.3), inset 0 0 40px rgba(231,111,81,0.05) !important;
     animation: shockPulse 2s ease-in-out infinite;
 }
 @keyframes shockPulse {
@@ -573,12 +573,36 @@ body {
 .player-item {
     display: flex; align-items: center; gap: 8px; padding: 8px 12px;
     border-radius: 8px; margin-bottom: 4px; background: var(--bg); transition: var(--transition);
+    position: relative;
 }
 .player-item:hover { background: var(--primary-tint); }
 .player-avatar { font-size: 20px; flex-shrink: 0; }
-.player-name { flex: 1; font-weight: 700; font-size: 14px; }
+.player-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.player-name { font-weight: 700; font-size: 14px; }
+.player-phone { font-size: 11px; color: var(--text-muted); }
+.player-joined { font-size: 10px; color: var(--text-muted); opacity: 0.7; }
 .player-points { font-weight: 800; color: var(--primary); font-size: 13px; }
 .player-streak { font-size: 13px; }
+.player-kick-btn {
+    background: rgba(231,111,81,0.15); border: 1px solid rgba(231,111,81,0.3);
+    color: #E76F51; border-radius: 50%; width: 22px; height: 22px;
+    font-size: 12px; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; transition: var(--transition); margin-left: 4px; flex-shrink: 0;
+}
+.player-kick-btn:hover { background: rgba(231,111,81,0.3); }
+.kick-confirm-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+    z-index: 10000; animation: fadeIn 0.2s ease-out;
+}
+.kick-confirm-card {
+    background: #1a2a20; border: 1px solid rgba(82,183,136,0.3); border-radius: 16px;
+    padding: 28px 32px; text-align: center; max-width: 380px; width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.kick-confirm-card h3 { color: #fff; margin-bottom: 8px; }
+.kick-confirm-card p { color: rgba(255,255,255,0.7); margin-bottom: 20px; font-size: 14px; }
+.kick-confirm-buttons { display: flex; gap: 12px; justify-content: center; }
 .slide-counter { text-align: center; font-size: 18px; font-weight: 800; color: var(--primary); margin-bottom: 12px; }
 .slide-nav { display: flex; gap: 12px; margin-bottom: 16px; }
 .progress-dots { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
@@ -865,6 +889,10 @@ body {
 .facilitator-page.dark-theme .player-item:hover {
     background: rgba(82,183,136,0.15);
 }
+.facilitator-page.dark-theme .player-phone,
+.facilitator-page.dark-theme .player-joined {
+    color: rgba(255,255,255,0.5);
+}
 .facilitator-page.dark-theme .qr-info {
     background: rgba(255,255,255,0.08);
 }
@@ -902,4 +930,30 @@ body {
     50% { transform: translateY(50vh) translateX(-10px) rotate(180deg); opacity: 0.3; }
     75% { transform: translateY(25vh) translateX(15px) rotate(270deg); opacity: 0.25; }
     100% { transform: translateY(-10vh) translateX(0) rotate(360deg); opacity: 0.1; }
+}
+
+/* ==================== FACILITATOR ACTIVITY PANEL FIXES ==================== */
+/* Facilitator activity panel - ensure button text is visible */
+.fac-activity-panel .quiz-option,
+.fac-activity-panel .tf-btn {
+    color: #fff !important;
+    font-weight: 700;
+}
+.fac-activity-panel .quiz-letter {
+    color: #fff !important;
+    background: rgba(255,255,255,0.25) !important;
+}
+.fac-activity-panel .tf-btn-true {
+    background: rgba(82,183,136,0.35) !important;
+    border-color: #52B788 !important;
+}
+.fac-activity-panel .tf-btn-false {
+    background: rgba(231,111,81,0.35) !important;
+    border-color: #E76F51 !important;
+}
+.fac-activity-panel .quiz-question-block {
+    background: rgba(255,255,255,0.08) !important;
+}
+.fac-activity-panel .quiz-question-block div {
+    color: #fff !important;
 }

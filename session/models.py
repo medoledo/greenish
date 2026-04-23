@@ -81,6 +81,7 @@ class Badge(models.Model):
 class Participant(models.Model):
     session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='participants')
     name = models.CharField(max_length=50)
+    phone = models.CharField(max_length=20, blank=True, default='')
     avatar = models.CharField(max_length=10, default='🌱')
     total_points = models.PositiveIntegerField(default=0)
     streak = models.PositiveIntegerField(default=0)

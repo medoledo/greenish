@@ -8,6 +8,7 @@ from django.views.decorators.cache import never_cache
 from django.contrib.admin.views.decorators import staff_member_required
 from django.conf import settings
 from django.core.cache import cache
+from django.core.serializers.json import DjangoJSONEncoder
 from .models import Session, Slide, Participant, Badge, ActivityResult, AnonymousPost
 
 
@@ -127,19 +128,22 @@ def join_session(request, code):
         return render(request, 'session/join_ended.html', {'session': session})
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
+        phone = request.POST.get('phone', '').strip()
         avatar = request.POST.get('avatar', '\U0001f331')
         if not name:
             return render(request, 'session/join.html', {'session': session, 'error': 'Please enter your name', 'avatar_choices': settings.AVATAR_CHOICES})
         participant, created = Participant.objects.get_or_create(
             session=session,
             name=name,
-            defaults={'avatar': avatar}
+            defaults={'avatar': avatar, 'phone': phone}
         )
         if not created:
             participant.avatar = avatar
+            participant.phone = phone
             participant.save()
         request.session['participant_id'] = participant.id
         request.session['session_code'] = code
+        request.session.modified = True
         return redirect('session_participant', code=session.code)
     return render(request, 'session/join.html', {'session': session, 'avatar_choices': settings.AVATAR_CHOICES})
 
@@ -160,19 +164,32 @@ def sse_stream(request, code):
         }
 
     def event_stream():
-        session.refresh_from_db()
+        try:
+            session.refresh_from_db()
+        except Session.DoesNotExist:
+            yield "event: error\ndata: {'message': 'Session not found'}\n\n"
+            return
         last_index = session.current_slide_index
         last_activity = session.activity_active
         last_status = session.status
         last_result_count = ActivityResult.objects.filter(session=session).count()
         last_show_answers = cache.get(f'show_answers_{code}', 0)
+        last_participant_count = session.participants.count()
+        last_total_points = sum(p.total_points for p in session.participants.all())
         while True:
-            session.refresh_from_db()
+            try:
+                session.refresh_from_db()
+            except Session.DoesNotExist:
+                yield "event: session_ended\ndata: {'message': 'Session deleted'}\n\n"
+                break
+
             current_index = session.current_slide_index
             activity_active = session.activity_active
             current_status = session.status
             current_result_count = ActivityResult.objects.filter(session=session).count()
             current_show_answers = cache.get(f'show_answers_{code}', 0)
+            current_participant_count = session.participants.count()
+            current_total_points = sum(p.total_points for p in session.participants.all())
 
             slides = list(session.slides.filter(is_active=True).order_by('order'))
             total_slides = len(slides)
@@ -206,6 +223,26 @@ def sse_stream(request, code):
                 data = json.dumps({'timestamp': current_show_answers})
                 yield f"event: show_answers\ndata: {data}\n\n"
                 last_show_answers = current_show_answers
+
+            if current_participant_count != last_participant_count or current_total_points != last_total_points:
+                participants_list = []
+                for p in session.participants.all().order_by('-total_points'):
+                    participants_list.append({
+                        'id': p.id,
+                        'name': p.name,
+                        'avatar': p.avatar,
+                        'phone': p.phone,
+                        'total_points': p.total_points,
+                        'streak': p.streak,
+                        'joined_at': p.joined_at.isoformat() if p.joined_at else None,
+                    })
+                data = json.dumps({
+                    'count': current_participant_count,
+                    'participants': participants_list,
+                }, cls=DjangoJSONEncoder)
+                yield f"event: participant_change\ndata: {data}\n\n"
+                last_participant_count = current_participant_count
+                last_total_points = current_total_points
 
             time.sleep(1)
 
@@ -253,12 +290,7 @@ def facilitator_action(request, code, action):
         session.save()
         ActivityResult.objects.filter(session=session).delete()
         AnonymousPost.objects.filter(session=session).delete()
-        for p in session.participants.all():
-            p.total_points = 0
-            p.streak = 0
-            p.max_streak = 0
-            p.badges.clear()
-            p.save()
+        session.participants.all().delete()
     elif action == 'show_answers':
         cache.set(f'show_answers_{code}', time.time(), timeout=300)
 
@@ -268,6 +300,16 @@ def facilitator_action(request, code, action):
         'activity_active': session.activity_active,
         'status': session.status,
     })
+
+
+@require_POST
+def kick_participant(request, code, participant_id):
+    session = get_object_or_404(Session, code=code)
+    if request.session.get(f'facilitator_{code}') != session.id:
+        return JsonResponse({'success': False, 'error': 'Not authorized'}, status=403)
+    participant = get_object_or_404(Participant, id=participant_id, session=session)
+    participant.delete()
+    return JsonResponse({'success': True})
 
 
 @require_POST
@@ -283,10 +325,11 @@ def submit_activity(request, code):
     activity_type = data.get('activity_type')
     answer = data.get('answer', '')
     is_correct = data.get('is_correct', None)
-    points_earned = 0
+    points_earned = data.get('points_earned', 0)
 
-    if is_correct:
+    if is_correct and not points_earned:
         points_earned = 10
+    if is_correct:
         participant.streak += 1
         if participant.streak >= 3:
             points_earned += 5
@@ -307,7 +350,7 @@ def submit_activity(request, code):
         is_correct=is_correct,
         points_earned=points_earned,
     )
-    check_and_award_badges(participant)
+    check_and_award_badges(participant, activity_type)
 
     return JsonResponse({
         'success': True,
@@ -345,18 +388,19 @@ def submit_post(request, code):
         is_public=True,
     )
     if participant:
+        activity_type = slide.activity_type if slide and slide.activity_type else 'discuss'
         result = ActivityResult.objects.create(
             session=session,
             participant=participant,
             slide=slide,
-            activity_type='discuss' if slide and slide.activity_type == 'discuss' else 'commit',
+            activity_type=activity_type,
             answer=content,
             is_correct=True,
             points_earned=5,
         )
         participant.total_points += 5
         participant.save()
-        check_and_award_badges(participant)
+        check_and_award_badges(participant, activity_type)
     return JsonResponse({
         'success': True,
         'post_id': post.id,
@@ -389,11 +433,14 @@ def get_leaderboard(request, code):
     session = get_object_or_404(Session, code=code)
     participants = session.participants.all().order_by('-total_points')[:20]
     leaderboard = [{
+        'id': p.id,
         'name': p.name,
         'avatar': p.avatar,
         'points': p.total_points,
         'streak': p.streak,
         'badges': list(p.badges.values_list('icon', flat=True)),
+        'phone': p.phone,
+        'joined_at': p.joined_at.isoformat() if p.joined_at else None,
     } for p in participants]
     return JsonResponse({'leaderboard': leaderboard})
 
@@ -413,21 +460,36 @@ def get_activity_stats(request, code):
         'correct': None,
         'avg_points': 0,
         'posts': [],
+        'submitted_users': [],
+        'not_submitted_users': [],
     }
 
     if current_slide:
         results = ActivityResult.objects.filter(session=session, slide=current_slide)
         stats['submitted'] = results.count()
-        correct_results = results.filter(is_correct=True)
-        stats['correct'] = correct_results.count() if correct_results.exists() else None
+        correct_count = results.filter(is_correct=True).count()
+        stats['correct'] = correct_count if correct_count > 0 else 0
         if results.exists():
-            stats['avg_points'] = round(results.aggregate(models.Avg('points_earned'))['points_earned__avg'] or 0)
+            from django.db.models import Avg
+            stats['avg_points'] = round(results.aggregate(Avg('points_earned'))['points_earned__avg'] or 0)
+
+        # Get submitted and not-submitted users
+        submitted_ids = set(results.values_list('participant_id', flat=True))
+        all_participants = session.participants.all().order_by('-total_points')
+        stats['submitted_users'] = [
+            {'id': p.id, 'name': p.name, 'avatar': p.avatar, 'points': p.total_points}
+            for p in all_participants if p.id in submitted_ids
+        ]
+        stats['not_submitted_users'] = [
+            {'id': p.id, 'name': p.name, 'avatar': p.avatar, 'points': p.total_points}
+            for p in all_participants if p.id not in submitted_ids
+        ]
 
         if current_slide.activity_type in ('commitment', 'discuss', 'commit'):
-            posts = session.posts.filter(slide=current_slide, is_public=True).order_by('-created_at')[:20]
+            posts = session.posts.filter(slide=current_slide, is_public=True).order_by('-created_at')[:50]
             stats['posts'] = [{
                 'name': p.participant.name if p.participant else 'Anonymous',
-                'avatar': p.participant.avatar if p.participant else '\U0001f331',
+                'avatar': p.participant.avatar if p.participant else '🌱',
                 'content': p.content,
             } for p in posts]
 
@@ -450,6 +512,21 @@ def get_slide_data(request, code, slide_id):
         'image': slide.image.url if slide.image else None,
     }
     return JsonResponse(data)
+
+
+@require_GET
+@never_cache
+def check_participant(request, code):
+    session = get_object_or_404(Session, code=code)
+    participant_id = request.session.get('participant_id')
+    is_valid = False
+    if participant_id:
+        try:
+            Participant.objects.get(id=participant_id, session=session)
+            is_valid = True
+        except Participant.DoesNotExist:
+            pass
+    return JsonResponse({'valid': is_valid, 'status': session.status})
 
 
 @require_GET
@@ -478,20 +555,30 @@ def get_session_state(request, code):
     })
 
 
-def check_and_award_badges(participant):
+ACTIVITY_BADGES = {
+    'sprint': {'name': 'Sorting Star', 'icon': '♻️', 'desc': 'Completed waste sorting sprint!'},
+    'decompose': {'name': 'Time Keeper', 'icon': '⏳', 'desc': 'Mastered decomposition times!'},
+    'quiz': {'name': 'Planet Protector', 'icon': '🌍', 'desc': 'Aced the plastic quiz!'},
+    'sort_stats': {'name': 'Fact Checker', 'icon': '📊', 'desc': 'Sorted the stats like a pro!'},
+    'commitment': {'name': 'Green Warrior', 'icon': '💚', 'desc': 'Made a green commitment!'},
+    'discuss': {'name': 'Wave Maker', 'icon': '🌊', 'desc': 'Participated in discussion!'},
+    'commit': {'name': 'Commitment Keeper', 'icon': '💪', 'desc': 'Made a commitment!'},
+}
+
+
+def check_and_award_badges(participant, activity_type=None):
     badges_to_award = []
     total_points = participant.total_points
     total_results = participant.results.count()
     correct_results = participant.results.filter(is_correct=True).count()
-    discuss_count = participant.results.filter(activity_type='discuss').count()
-    commit_count = participant.results.filter(activity_type='commit').count()
+    discuss_count = participant.results.filter(activity_type__in=('discuss', 'commit')).count()
 
     if correct_results >= 1:
         badge, _ = Badge.objects.get_or_create(
             name='First Bloom',
             trigger_type='count',
             trigger_value=1,
-            defaults={'description': 'First correct answer', 'icon': '\U0001f331'}
+            defaults={'description': 'First correct answer', 'icon': '🌱'}
         )
         badges_to_award.append(badge)
     if participant.max_streak >= 3 or participant.streak >= 3:
@@ -499,7 +586,7 @@ def check_and_award_badges(participant):
             name='On Fire',
             trigger_type='streak',
             trigger_value=3,
-            defaults={'description': '3 correct answers in a row', 'icon': '\U0001f525'}
+            defaults={'description': '3 correct answers in a row', 'icon': '🔥'}
         )
         badges_to_award.append(badge)
     if correct_results >= 5:
@@ -507,24 +594,28 @@ def check_and_award_badges(participant):
             name='Sorting Pro',
             trigger_type='count',
             trigger_value=5,
-            defaults={'description': '5 correct answers', 'icon': '\U0000267b\ufe0f'}
+            defaults={'description': '5 correct answers', 'icon': '🏆'}
         )
         badges_to_award.append(badge)
     if discuss_count >= 1:
         badge, _ = Badge.objects.get_or_create(
-            name='Wave Maker',
+            name='Community Voice',
             trigger_type='activity',
             trigger_value=1,
-            defaults={'description': 'Participated in discussion', 'icon': '\U0001f30a'}
+            defaults={'description': 'Shared in community discussion', 'icon': '💬'}
         )
         badges_to_award.append(badge)
-    if commit_count >= 1:
+
+    # Activity-specific badge
+    if activity_type and activity_type in ACTIVITY_BADGES:
+        info = ACTIVITY_BADGES[activity_type]
         badge, _ = Badge.objects.get_or_create(
-            name='Commitment Keeper',
+            name=info['name'],
             trigger_type='activity',
             trigger_value=1,
-            defaults={'description': 'Made a commitment', 'icon': '\U0001f4aa'}
+            defaults={'description': info['desc'], 'icon': info['icon']}
         )
         badges_to_award.append(badge)
+
     for badge in badges_to_award:
         participant.badges.add(badge)

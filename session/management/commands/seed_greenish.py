@@ -53,9 +53,13 @@ class Command(BaseCommand):
                 'shocking_fact': True,
             },
             {
-                'order': 7, 'slide_type': 'activity', 'title': 'Sort the Waste Types! 🗂️',
-                'activity_type': 'sprint',
-                'activity_config': {'template': 'sprint'},
+                'order': 7, 'slide_type': 'activity', 'title': '💬 What Waste Do You See?',
+                'activity_type': 'discuss',
+                'activity_config': {
+                    'template': 'discuss',
+                    'prompt': 'Share one type of waste you see every day in your community.',
+                    'max_chars': 280,
+                },
             },
 
             # TOPIC 3: WHY IS IT A PROBLEM? (2 slides + sort_stats activity)
@@ -175,7 +179,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'Session created: {session.code}'))
         self.stdout.write(self.style.SUCCESS(f'Title: {session.title}'))
         self.stdout.write(self.style.SUCCESS(f'Slides created: {len(slides_data)}'))
-        self.stdout.write(self.style.SUCCESS(f'Activities: 7 (sprint ×2, sort_stats, decompose, quiz, commitment ×2, discuss)'))
+        self.stdout.write(self.style.SUCCESS(f'Activities: 7 (sprint, discuss, sort_stats, decompose, quiz, commitment ×2, discuss)'))
         self.stdout.write(self.style.SUCCESS(f'Facilitator password: greenish2024'))
         self.stdout.write(self.style.SUCCESS(f'Join URL: /session/{session.code}/join/'))
         self.stdout.write(self.style.SUCCESS(f'Facilitator URL: /session/{session.code}/facilitator/'))

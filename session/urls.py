@@ -29,6 +29,8 @@ urlpatterns = [
     path('<str:code>/posts/', views.get_posts, name='session_posts'),
     path('<str:code>/leaderboard/', views.get_leaderboard, name='session_leaderboard'),
     path('<str:code>/activity-stats/', views.get_activity_stats, name='session_activity_stats'),
+    path('<str:code>/kick/<int:participant_id>/', views.kick_participant, name='session_kick'),
     path('<str:code>/slide/<int:slide_id>/', views.get_slide_data, name='session_slide_data'),
     path('<str:code>/state/', views.get_session_state, name='session_state'),
+    path('<str:code>/check/', views.check_participant, name='session_check'),
 ]

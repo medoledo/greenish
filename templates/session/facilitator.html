@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Facilitator - {{ session.title }}</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=8">
+    <link rel="stylesheet" href="/static/css/session.css?v=9">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="facilitator-page dark-theme">
@@ -28,7 +31,7 @@
 
     <header class="facilitator-header">
         <div class="header-left">
-            <img src="/static/img/logo.svg?v=8" alt="Greenish" class="logo-facilitator" style="filter:brightness(0) invert(1);">
+            <img src="/static/img/logo.svg?v=9" alt="Greenish" class="logo-facilitator" style="filter:brightness(0) invert(1);">
             <h1 class="header-title">{{ session.title }}</h1>
         </div>
         <div class="header-right">
@@ -119,14 +122,19 @@
             </div>
 
             <div class="players-section">
-                <h3>👥 Joined Players ({{ participant_count }})</h3>
+                <h3>👥 Joined Players (<span id="player-count">{{ participant_count }}</span>)</h3>
                 <div class="players-list" id="players-list">
                     {% for p in participants %}
-                    <div class="player-item">
+                    <div class="player-item" id="player-{{ p.id }}">
                         <span class="player-avatar">{{ p.avatar }}</span>
-                        <span class="player-name">{{ p.name }}</span>
+                        <div class="player-info">
+                            <span class="player-name">{{ p.name }}</span>
+                            <span class="player-phone">{{ p.phone }}</span>
+                            <span class="player-joined" data-joined="{{ p.joined_at.isoformat }}">just now</span>
+                        </div>
                         <span class="player-points">{{ p.total_points }}pts</span>
                         {% if p.streak >= 2 %}<span class="player-streak">🔥{{ p.streak }}</span>{% endif %}
+                        <button class="player-kick-btn" onclick="confirmKick({{ p.id }}, '{{ p.name|escapejs }}')" title="Remove player">✕</button>
                     </div>
                     {% endfor %}
                 </div>
@@ -251,7 +259,7 @@
         })();
 
         function connectSSE() {
-            eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/');
+            eventSource = new EventSource('/session/' + SESSION_CODE + '/stream/?v=' + Date.now());
             eventSource.addEventListener('slide_change', function(event) {
                 const data = JSON.parse(event.data);
                 currentSlideIndex = data.slide_index;
@@ -284,6 +292,13 @@
                 if (activityActive && currentSlideData && currentSlideData.slide_type === 'activity') {
                     refreshLiveStats();
                 }
+            });
+            eventSource.addEventListener('participant_change', function(event) {
+                const data = JSON.parse(event.data);
+                document.getElementById('player-count').textContent = data.count;
+                const playersSection = document.querySelector('.players-section h3');
+                if (playersSection) playersSection.innerHTML = '👥 Joined Players (<span id="player-count">' + data.count + '</span>)';
+                updatePlayersList(data.participants);
             });
             eventSource.onerror = function() {
                 setTimeout(connectSSE, 3000);
@@ -521,13 +536,33 @@
             fetch('/session/' + SESSION_CODE + '/activity-stats/')
             .then(r => r.json())
             .then(data => {
+                let statsHTML = '';
                 if (data.total > 0) {
-                    statsEl.innerHTML = '<div class="fac-stat"><strong>' + data.submitted + '</strong>/' + data.total + ' submitted</div>' +
+                    statsHTML += '<div class="fac-stat"><strong>' + data.submitted + '</strong>/' + data.total + ' submitted</div>' +
                         (data.correct !== null ? '<div class="fac-stat"><strong>' + data.correct + '</strong> correct</div>' : '') +
                         '<div class="fac-stat"><strong>' + data.avg_points + '</strong> avg pts</div>';
                 } else {
-                    statsEl.innerHTML = '<div class="fac-stat">Waiting for submissions...</div>';
+                    statsHTML += '<div class="fac-stat">Waiting for submissions...</div>';
                 }
+
+                // Show submitted vs not-submitted users
+                if (data.submitted_users.length > 0 || data.not_submitted_users.length > 0) {
+                    statsHTML += '<div style="width:100%;margin-top:12px;">';
+                    if (data.submitted_users.length > 0) {
+                        statsHTML += '<div style="font-size:12px;color:#52B788;font-weight:700;margin-bottom:6px;">✅ Submitted (' + data.submitted_users.length + ')</div>';
+                        statsHTML += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">';
+                        statsHTML += data.submitted_users.map(u => '<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(82,183,136,0.2);border-radius:12px;font-size:12px;color:#fff;">' + u.avatar + ' ' + u.name + '</span>').join('');
+                        statsHTML += '</div>';
+                    }
+                    if (data.not_submitted_users.length > 0) {
+                        statsHTML += '<div style="font-size:12px;color:rgba(255,255,255,0.5);font-weight:700;margin-bottom:6px;">⏳ Not Submitted (' + data.not_submitted_users.length + ')</div>';
+                        statsHTML += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+                        statsHTML += data.not_submitted_users.map(u => '<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:rgba(255,255,255,0.08);border-radius:12px;font-size:12px;color:rgba(255,255,255,0.6);">' + u.avatar + ' ' + u.name + '</span>').join('');
+                        statsHTML += '</div>';
+                    }
+                    statsHTML += '</div>';
+                }
+                statsEl.innerHTML = statsHTML;
 
                 if (data.posts && data.posts.length > 0) {
                     feedEl.innerHTML = data.posts.map(p =>
@@ -549,7 +584,18 @@
             fetch('/session/' + SESSION_CODE + '/action/' + direction + '/', {
                 method: 'POST',
                 headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
-            }).then(r => r.json()).finally(() => {
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    currentSlideIndex = data.slide_index;
+                    CURRENT_INDEX = data.slide_index;
+                    // Optimistically update counter and dots immediately
+                    document.getElementById('current-index').textContent = data.slide_index + 1;
+                    document.querySelectorAll('#progress-dots .dot').forEach((dot, i) => {
+                        dot.classList.remove('active');
+                        if (i === data.slide_index) dot.classList.add('active');
+                    });
+                }
+            }).finally(() => {
                 isLoading = false;
                 if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
             });
@@ -561,7 +607,17 @@
                 method: 'POST',
                 headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
                 body: 'index=' + index,
-            }).then(r => r.json());
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    currentSlideIndex = data.slide_index;
+                    CURRENT_INDEX = data.slide_index;
+                    document.getElementById('current-index').textContent = data.slide_index + 1;
+                    document.querySelectorAll('#progress-dots .dot').forEach((dot, i) => {
+                        dot.classList.remove('active');
+                        if (i === data.slide_index) dot.classList.add('active');
+                    });
+                }
+            });
         }
 
         function sessionAction(action) {
@@ -650,6 +706,9 @@
             if (badge) badge.style.display = activityActive ? 'inline-flex' : 'none';
             const btn = document.getElementById('btn-activity');
             if (btn) btn.innerHTML = activityActive ? '⏹ Stop Activity' : '🏁 Start Activity';
+            // Reset show answers button when toggling activity
+            const showBtn = document.getElementById('btn-show-answers');
+            if (showBtn) { showBtn.textContent = '📋 Show Correct Answers'; showBtn.disabled = false; showBtn.style.display = 'none'; }
         }
 
         function toggleLeaderboard() {
@@ -677,27 +736,85 @@
         }
 
         function refreshPlayersList() {
-            fetch('/session/' + SESSION_CODE + '/state/')
-            .then(r => r.json())
-            .then(data => {
-                document.getElementById('participant-count').textContent = data.participant_count + ' participants';
-                const playersSection = document.querySelector('.players-section h3');
-                if (playersSection) playersSection.textContent = '👥 Joined Players (' + data.participant_count + ')';
-            });
             fetch('/session/' + SESSION_CODE + '/leaderboard/')
             .then(r => r.json())
             .then(data => {
                 const list = document.getElementById('players-list');
+                const countEl = document.getElementById('player-count');
+                if (countEl) countEl.textContent = data.leaderboard.length;
+                const playersSection = document.querySelector('.players-section h3');
+                if (playersSection) playersSection.innerHTML = '👥 Joined Players (<span id="player-count">' + data.leaderboard.length + '</span>)';
                 if (list) {
                     list.innerHTML = data.leaderboard.map(p =>
-                        '<div class="player-item">' +
+                        '<div class="player-item" id="player-' + p.id + '">' +
                         '<span class="player-avatar">' + p.avatar + '</span>' +
+                        '<div class="player-info">' +
                         '<span class="player-name">' + p.name + '</span>' +
+                        (p.phone ? '<span class="player-phone">' + p.phone + '</span>' : '') +
+                        '<span class="player-joined" data-joined="' + p.joined_at + '">just now</span>' +
+                        '</div>' +
                         '<span class="player-points">' + p.points + 'pts</span>' +
                         (p.streak >= 2 ? '<span class="player-streak">🔥' + p.streak + '</span>' : '') +
+                        '<button class="player-kick-btn" onclick="confirmKick(' + p.id + ', \'' + p.name.replace(/'/g, "\\'") + '\')" title="Remove player">✕</button>' +
                         '</div>'
                     ).join('');
                 }
+                updateJoinedTimers();
+            });
+        }
+
+        function updatePlayersList(participants) {
+            const list = document.getElementById('players-list');
+            if (!list) return;
+            list.innerHTML = participants.map(p =>
+                '<div class="player-item" id="player-' + p.id + '">' +
+                '<span class="player-avatar">' + p.avatar + '</span>' +
+                '<div class="player-info">' +
+                '<span class="player-name">' + p.name + '</span>' +
+                (p.phone ? '<span class="player-phone">' + p.phone + '</span>' : '') +
+                '<span class="player-joined" data-joined="' + p.joined_at + '">just now</span>' +
+                '</div>' +
+                '<span class="player-points">' + p.total_points + 'pts</span>' +
+                (p.streak >= 2 ? '<span class="player-streak">🔥' + p.streak + '</span>' : '') +
+                '<button class="player-kick-btn" onclick="confirmKick(' + p.id + ', \'' + p.name.replace(/'/g, "\\'") + '\')" title="Remove player">✕</button>' +
+                '</div>'
+            ).join('');
+            updateJoinedTimers();
+        }
+
+        function updateJoinedTimers() {
+            document.querySelectorAll('.player-joined[data-joined]').forEach(el => {
+                const joined = new Date(el.dataset.joined);
+                const diff = Math.floor((Date.now() - joined.getTime()) / 60000);
+                if (diff < 1) el.textContent = 'just now';
+                else if (diff < 60) el.textContent = diff + ' min ago';
+                else el.textContent = Math.floor(diff / 60) + 'h ' + (diff % 60) + 'm ago';
+            });
+        }
+
+        function confirmKick(playerId, playerName) {
+            const overlay = document.createElement('div');
+            overlay.className = 'kick-confirm-overlay';
+            overlay.innerHTML = '<div class="kick-confirm-card">' +
+                '<h3>Remove Player?</h3>' +
+                '<p>Are you sure you want to remove <strong>' + playerName + '</strong> from the session?</p>' +
+                '<div class="kick-confirm-buttons">' +
+                '<button class="btn btn-danger" onclick="kickPlayer(' + playerId + ', this.closest(\'.kick-confirm-overlay\'))">Remove</button>' +
+                '<button class="btn btn-outline" style="color:#fff;border-color:rgba(255,255,255,0.3);" onclick="this.closest(\'.kick-confirm-overlay\').remove()">Cancel</button>' +
+                '</div></div>';
+            document.body.appendChild(overlay);
+        }
+
+        function kickPlayer(playerId, overlay) {
+            fetch('/session/' + SESSION_CODE + '/kick/' + playerId + '/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded'},
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    const playerEl = document.getElementById('player-' + playerId);
+                    if (playerEl) playerEl.remove();
+                }
+                if (overlay) overlay.remove();
             });
         }
 
@@ -713,7 +830,7 @@
 
         setInterval(function() {
             loadLeaderboard();
-            refreshPlayersList();
+            updateJoinedTimers();
             if (activityActive && currentSlideData && currentSlideData.slide_type === 'activity') {
                 refreshLiveStats();
             }
