@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -7,7 +8,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Facilitator - {{ session.title }}</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=9">
+    <link rel="stylesheet" href="{% static 'css/session.css' %}">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="facilitator-page dark-theme">
@@ -31,7 +32,7 @@
 
     <header class="facilitator-header">
         <div class="header-left">
-            <img src="/static/img/logo.svg?v=9" alt="Greenish" class="logo-facilitator" style="filter:brightness(0) invert(1);">
+            <img src="{% static 'img/logo.svg' %}" alt="Greenish" class="logo-facilitator" style="filter:brightness(0) invert(1);">
             <h1 class="header-title">{{ session.title }}</h1>
         </div>
         <div class="header-right">

@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -7,13 +8,13 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Create Session - Greenish</title>
-    <link rel="stylesheet" href="/static/css/session.css?v=9">
+    <link rel="stylesheet" href="{% static 'css/session.css' %}">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 </head>
 <body class="create-page">
     <div class="form-container">
         <div class="form-logo">
-            <img src="/static/img/logo.svg?v=6" alt="Greenish" class="logo-img-small">
+            <img src="{% static 'img/logo.svg' %}" alt="Greenish" class="logo-img-small">
         </div>
         <h1>Create a Session</h1>
         <p class="form-subtitle">Set up your waste management awareness session</p>
