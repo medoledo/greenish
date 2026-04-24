@@ -128,7 +128,7 @@
                 <h3>👥 Joined Players (<span id="player-count">{{ participant_count }}</span>)</h3>
                 <div class="players-list" id="players-list">
                     {% for p in participants %}
-                    <div class="player-item" id="player-{{ p.id }}">
+                    <div class="player-item {% if forloop.counter > 10 %}player-item-extra{% endif %}" id="player-{{ p.id }}">
                         <span class="player-avatar">{{ p.avatar }}</span>
                         <div class="player-info">
                             <span class="player-name">{{ p.name }}</span>
@@ -140,6 +140,9 @@
                         <button class="player-kick-btn" onclick="confirmKick({{ p.id }}, '{{ p.name|escapejs }}')" title="Remove player">✕</button>
                     </div>
                     {% endfor %}
+                    {% if participants|length > 10 %}
+                    <button class="show-all-members-btn" id="show-all-members-btn" onclick="toggleShowAllPlayers()">Show all members (+{{ participants|length|add:-10 }})</button>
+                    {% endif %}
                 </div>
                 <div class="submission-status" id="submission-status" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);">
                     <h4 style="color:rgba(255,255,255,0.7);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Activity Progress</h4>
@@ -908,8 +911,10 @@
                 const playersSection = document.querySelector('.players-section h3');
                 if (playersSection) playersSection.innerHTML = '👥 Joined Players (<span id="player-count">' + data.leaderboard.length + '</span>)';
                 if (list) {
-                    list.innerHTML = data.leaderboard.map(p =>
-                        '<div class="player-item" id="player-' + p.id + '">' +
+                    let html = '';
+                    data.leaderboard.forEach((p, i) => {
+                        const extraClass = i >= 10 ? 'player-item-extra' : '';
+                        html += '<div class="player-item ' + extraClass + '" id="player-' + p.id + '">' +
                         '<span class="player-avatar">' + p.avatar + '</span>' +
                         '<div class="player-info">' +
                         '<span class="player-name">' + p.name + '</span>' +
@@ -919,8 +924,13 @@
                         '<span class="player-points">' + p.points + 'pts</span>' +
                         (p.streak >= 2 ? '<span class="player-streak">🔥' + p.streak + '</span>' : '') +
                         '<button class="player-kick-btn" onclick="confirmKick(' + p.id + ', \'' + p.name.replace(/'/g, "\\'") + '\')" title="Remove player">✕</button>' +
-                        '</div>'
-                    ).join('');
+                        '</div>';
+                    });
+                    if (data.leaderboard.length > 10) {
+                        const remaining = data.leaderboard.length - 10;
+                        html += '<button class="show-all-members-btn" id="show-all-members-btn" onclick="toggleShowAllPlayers()">Show all members (+' + remaining + ')</button>';
+                    }
+                    list.innerHTML = html;
                 }
                 updateJoinedTimers();
             });
@@ -929,8 +939,10 @@
         function updatePlayersList(participants) {
             const list = document.getElementById('players-list');
             if (!list) return;
-            list.innerHTML = participants.map(p =>
-                '<div class="player-item" id="player-' + p.id + '">' +
+            let html = '';
+            participants.forEach((p, i) => {
+                const extraClass = i >= 10 ? 'player-item-extra' : '';
+                html += '<div class="player-item ' + extraClass + '" id="player-' + p.id + '">' +
                 '<span class="player-avatar">' + p.avatar + '</span>' +
                 '<div class="player-info">' +
                 '<span class="player-name">' + p.name + '</span>' +
@@ -940,8 +952,13 @@
                 '<span class="player-points">' + p.total_points + 'pts</span>' +
                 (p.streak >= 2 ? '<span class="player-streak">🔥' + p.streak + '</span>' : '') +
                 '<button class="player-kick-btn" onclick="confirmKick(' + p.id + ', \'' + p.name.replace(/'/g, "\\'") + '\')" title="Remove player">✕</button>' +
-                '</div>'
-            ).join('');
+                '</div>';
+            });
+            if (participants.length > 10) {
+                const remaining = participants.length - 10;
+                html += '<button class="show-all-members-btn" id="show-all-members-btn" onclick="toggleShowAllPlayers()">Show all members (+' + remaining + ')</button>';
+            }
+            list.innerHTML = html;
             updateJoinedTimers();
         }
 
@@ -953,6 +970,27 @@
                 else if (diff < 60) el.textContent = diff + ' min ago';
                 else el.textContent = Math.floor(diff / 60) + 'h ' + (diff % 60) + 'm ago';
             });
+        }
+
+        function toggleShowAllPlayers() {
+            const list = document.getElementById('players-list');
+            if (!list) return;
+            const extras = list.querySelectorAll('.player-item-extra');
+            const btn = document.getElementById('show-all-members-btn');
+            const isHidden = extras.length > 0 && !extras[0].classList.contains('visible');
+            extras.forEach(el => {
+                if (isHidden) el.classList.add('visible');
+                else el.classList.remove('visible');
+            });
+            if (btn) {
+                const total = list.querySelectorAll('.player-item').length;
+                const remaining = total - 10;
+                if (isHidden) {
+                    btn.textContent = 'Show fewer members';
+                } else {
+                    btn.textContent = 'Show all members (+' + remaining + ')';
+                }
+            }
         }
 
         function confirmKick(playerId, playerName) {

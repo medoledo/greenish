@@ -162,10 +162,10 @@ html, body {
 }
 
 .glass-card {
-    background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+    background: rgba(10, 40, 25, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(82, 183, 136, 0.25); border-radius: var(--radius-lg);
     padding: 40px; max-width: 460px; width: 100%; margin: 20px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.1); position: relative; z-index: 10;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25); position: relative; z-index: 10;
     max-height: 90vh;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -597,7 +597,27 @@ html, body {
     font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
     color: var(--text-muted); margin-bottom: 12px;
 }
-.players-list { max-height: 250px; overflow-y: auto; }
+.players-list { max-height: 380px; overflow-y: auto; }
+.player-item-extra { display: none; }
+.player-item-extra.visible { display: flex; }
+.show-all-members-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'Nunito', sans-serif;
+    background: rgba(82, 183, 136, 0.12);
+    border: 1px solid rgba(82, 183, 136, 0.25);
+    color: var(--primary);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: center;
+}
+.show-all-members-btn:hover {
+    background: rgba(82, 183, 136, 0.22);
+}
 .player-item {
     display: flex; align-items: center; gap: 8px; padding: 8px 12px;
     border-radius: 8px; margin-bottom: 4px; background: var(--bg); transition: var(--transition);
